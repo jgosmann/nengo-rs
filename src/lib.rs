@@ -1,5 +1,7 @@
+use core::ops::{AddAssign, Mul};
 use ndarray::prelude::*;
-use ndarray::{Array, ArrayD, ArrayViewMut, Axis};
+use ndarray::{Array, ArrayD, ArrayViewMut, Axis, ScalarOperand};
+use numpy::convert::IntoPyArray;
 use numpy::npyffi;
 use numpy::{PyArray, PyArray1, PyArrayDyn, ToPyArray, TypeNum};
 use pyo3::conversion::FromPyObject;
@@ -8,20 +10,63 @@ use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 use pyo3::PyDowncastError;
 use std::any::TypeId;
-use std::cell::RefCell;
+use std::borrow::{Borrow, BorrowMut};
+use std::cell::{Ref, RefCell, RefMut};
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 type SignalBuffer<T> = RefCell<ArrayD<T>>;
 
-struct Signal<T: TypeNum> {
+trait Signal<T> {
+    fn name(&self) -> &String;
+    fn get(&self) -> &T;
+    fn get_mut(&self) -> &mut T;
+    fn reset(&mut self);
+}
+
+struct ScalarSignal<T> {
+    name: String,
+    value: T,
+    initial_value: T,
+}
+
+impl<T> ScalarSignal<T> {
+    fn new(name: String, initial_value: T) -> Self {
+        ScalarSignal {
+            name,
+            value: initial_value,
+            initial_value,
+        }
+    }
+}
+
+impl<T> Signal<T> for ScalarSignal<T> {
+    fn name(&self) -> &String {
+        &self.name
+    }
+
+    fn get(&self) -> &T {
+        &self.value
+    }
+
+    fn get_mut(&self) -> &mut T {
+        &mut self.value
+    }
+
+    fn reset(&mut self) {
+        self.value = self.initial_value;
+    }
+}
+
+struct ArraySignal<T: TypeNum> {
     name: String,
     buffer: SignalBuffer<T>,
     initial_value: Py<PyArrayDyn<T>>,
 }
 
-impl<T: TypeNum> Signal<T> {
+impl<T: TypeNum> ArraySignal<T> {
     fn new(name: String, initial_value: &PyArrayDyn<T>) -> Self {
-        Signal {
+        ArraySignal {
             name,
             buffer: SignalBuffer::new(unsafe {
                 Array::uninitialized(match initial_value.shape() {
@@ -32,12 +77,25 @@ impl<T: TypeNum> Signal<T> {
             initial_value: Py::from(initial_value),
         }
     }
+}
 
-    fn reset(&self) {
+impl<T: TypeNum> Signal<ArrayD<T>> for ArraySignal<T> {
+    fn name(&self) -> &String {
+        &self.name
+    }
+
+    fn get(&self) -> &ArrayD<T> {
+        &self.buffer.borrow()
+    }
+
+    fn get_mut(&self) -> &mut ArrayD<T> {
+        &mut self.buffer.borrow_mut()
+    }
+
+    fn reset(&mut self) {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        self.buffer
-            .borrow_mut()
+        self.get_mut()
             .assign(&self.initial_value.as_ref(py).as_array())
     }
 }
@@ -46,78 +104,97 @@ trait Operator {
     fn step(&self);
 }
 
-struct Reset {
-    value: ArrayD<f64>,
-    target: Rc<Signal<f64>>,
+struct Reset<T, S>
+where
+    S: Signal<T>,
+{
+    value: T,
+    target: Rc<S>,
 }
 
-impl Operator for Reset {
+impl<T: TypeNum> Operator for Reset<ArrayD<T>, ArraySignal<T>> {
     fn step(&self) {
-        self.target.buffer.borrow_mut().assign(&self.value);
+        self.target.get_mut().assign(&self.value);
+    }
+}
+
+impl<T> Operator for Reset<T, ScalarSignal<T>> {
+    fn step(&self) {
+        *self.target.get_mut() = self.value;
     }
 }
 
 struct TimeUpdate {
     dt: f64,
-    step_target: Rc<Signal<i64>>,
-    time_target: Rc<Signal<f64>>,
+    step_target: Rc<ScalarSignal<i64>>,
+    time_target: Rc<ScalarSignal<f64>>,
 }
 
 impl Operator for TimeUpdate {
     fn step(&self) {
-        *self.step_target.buffer.borrow_mut() += 1;
-        self.time_target
-            .buffer
-            .borrow_mut()
-            .assign(&(self.step_target.buffer.borrow().mapv(|elem| elem as f64) * self.dt));
+        *self.step_target.get_mut() += 1;
+        *self.time_target.get_mut() = *self.step_target.get() as f64 * self.dt;
     }
 }
 
-struct ElementwiseInc {
-    left: Rc<Signal<f64>>,
-    right: Rc<Signal<f64>>,
-    target: Rc<Signal<f64>>,
+struct ElementwiseInc<T>
+where
+    T: TypeNum,
+{
+    target: Rc<ArraySignal<T>>,
+    left: Rc<ArraySignal<T>>,
+    right: Rc<ArraySignal<T>>,
 }
 
-impl Operator for ElementwiseInc {
+impl<T> Operator for ElementwiseInc<T>
+where
+    T: TypeNum + Mul<T, Output = T> + AddAssign<T>,
+{
     fn step(&self) {
-        let left = &(*self.left.buffer.borrow());
-        let right = &(*self.right.buffer.borrow());
-        let mut target = self.target.buffer.borrow_mut();
+        let left = self.left.get();
+        let right = self.right.get();
+        let mut target = self.target.get_mut();
         *target += &(left * right);
     }
 }
 
-struct CopyOp {
-    src: Rc<Signal<f64>>,
-    dst: Rc<Signal<f64>>,
+struct CopyOp<T, S> {
+    src: Rc<S>,
+    dst: Rc<S>,
+    data_type: PhantomData<T>,
 }
 
-impl Operator for CopyOp {
+impl<T: TypeNum> Operator for CopyOp<ArrayD<T>, ArraySignal<T>> {
     fn step(&self) {
-        self.dst
-            .buffer
-            .borrow_mut()
-            .assign(&self.src.buffer.borrow());
+        self.dst.get_mut().assign(&self.src.get());
+    }
+}
+
+impl<T> Operator for CopyOp<T, ScalarSignal<T>> {
+    fn step(&self) {
+        *self.dst.get_mut() = *self.src.get();
     }
 }
 
 trait Probe {
     fn probe(&mut self);
-    fn get_data(&self, py: Python) -> PyObject;
+    fn get_data(&self, py: Python) -> PyResult<PyObject>;
 }
 
-struct ProbeData<T: TypeNum> {
-    signal: Rc<Signal<T>>,
-    data: Vec<ArrayD<T>>,
+struct SignalProbe<T, S>
+where
+    S: Signal<T>,
+{
+    signal: Rc<S>,
+    data: Vec<T>,
 }
 
-impl<T: TypeNum> Probe for ProbeData<T> {
+impl<T: TypeNum> Probe for SignalProbe<ArrayD<T>, ArraySignal<T>> {
     fn probe(&mut self) {
-        self.data.push(self.signal.buffer.borrow().clone())
+        self.data.push(self.signal.get().clone())
     }
 
-    fn get_data(&self, py: Python) -> PyObject {
+    fn get_data(&self, py: Python) -> PyResult<PyObject> {
         let copy = PyArrayDyn::new(
             py,
             [
@@ -130,13 +207,24 @@ impl<T: TypeNum> Probe for ProbeData<T> {
         for (i, x) in self.data.iter().enumerate() {
             copy.as_array_mut().index_axis_mut(Axis(0), i).assign(x);
         }
-        copy.to_object(py)
+        Ok(copy.to_object(py))
+    }
+}
+
+impl<T: TypeNum> Probe for SignalProbe<T, ScalarSignal<T>> {
+    fn probe(&mut self) {
+        self.data.push(*self.signal.get());
+    }
+
+    fn get_data(&self, py: Python) -> PyResult<PyObject> {
+        let copy = Array::from(self.data).into_pyarray(py);
+        Ok(copy.to_object(py))
     }
 }
 
 struct SignalMap {
-    map_i64: Vec<Rc<Signal<i64>>>,
-    map_f64: Vec<Rc<Signal<f64>>>,
+    map_i64: Vec<Rc<ArraySignal<i64>>>,
+    map_f64: Vec<Rc<ArraySignal<f64>>>,
 }
 
 #[pyclass]
@@ -171,14 +259,14 @@ impl Engine {
                 let initial_value: &PyArrayDyn<f64> = initial_value.extract()?;
                 self.signals
                     .map_f64
-                    .push(Rc::new(Signal::new(name, initial_value)));
+                    .push(Rc::new(ArraySignal::new(name, initial_value)));
                 Ok(self.signals.map_f64.len() - 1)
             }
             "int64" => {
                 let initial_value: &PyArrayDyn<i64> = initial_value.extract()?;
                 self.signals
                     .map_i64
-                    .push(Rc::new(Signal::new(name, initial_value)));
+                    .push(Rc::new(ArraySignal::new(name, initial_value)));
                 Ok(self.signals.map_i64.len() - 1)
             }
             dtype => Err(PyErr::new::<exceptions::TypeError, _>(format!(
@@ -191,10 +279,11 @@ impl Engine {
     fn push_reset(&mut self, value: &PyAny, target: usize) -> PyResult<()> {
         let value: &PyArrayDyn<f64> = value.extract()?;
         let value = value.to_owned_array();
-        self.operators.push(Box::new(Reset {
-            value,
-            target: Rc::clone(&self.signals.map_f64[target]),
-        }));
+        self.operators
+            .push(Box::new(Reset::<ArrayD<f64>, ArraySignal<f64>> {
+                value,
+                target: Rc::clone(&self.signals.map_f64[target]),
+            }));
         Ok(())
     }
 
@@ -217,10 +306,12 @@ impl Engine {
     }
 
     fn push_copy(&mut self, src: usize, dst: usize) -> PyResult<()> {
-        self.operators.push(Box::new(CopyOp {
-            src: Rc::clone(&self.signals.map_f64[src]),
-            dst: Rc::clone(&self.signals.map_f64[dst]),
-        }));
+        self.operators
+            .push(Box::new(CopyOp::<ArrayD<f64>, ArraySignal<f64>> {
+                src: Rc::clone(&self.signals.map_f64[src]),
+                dst: Rc::clone(&self.signals.map_f64[dst]),
+                data_type: PhantomData,
+            }));
         Ok(())
     }
 
@@ -254,14 +345,15 @@ impl Engine {
     }
 
     fn add_probe(&mut self, target: usize) -> usize {
-        self.probes.push(Box::new(ProbeData {
-            signal: Rc::clone(&self.signals.map_f64[target]),
-            data: vec![],
-        }));
+        self.probes
+            .push(Box::new(SignalProbe::<ArrayD<f64>, ArraySignal<f64>> {
+                signal: Rc::clone(&self.signals.map_f64[target]),
+                data: vec![],
+            }));
         self.probes.len() - 1
     }
 
-    fn get_probe_data(&self, target: usize) -> PyObject {
+    fn get_probe_data(&self, target: usize) -> PyResult<PyObject> {
         let gil = Python::acquire_gil();
         let py = gil.python();
         self.probes[target].get_data(py)
