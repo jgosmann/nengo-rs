@@ -1,4 +1,4 @@
-use crate::signal::{ArraySignal, ScalarSignal, Signal};
+use crate::signal::{ArraySignal, Get, ScalarSignal, Signal};
 use ndarray::{Array, ArrayD, Axis};
 use numpy::convert::IntoPyArray;
 use numpy::{PyArrayDyn, TypeNum};
@@ -10,15 +10,12 @@ pub trait Probe {
     fn get_data(&self, py: Python) -> PyResult<PyObject>;
 }
 
-pub struct SignalProbe<T, S>
-where
-    S: Signal<T>,
-{
+pub struct SignalProbe<T, S: Signal> {
     signal: Rc<S>,
     data: Vec<T>,
 }
 
-impl<T, S: Signal<T>> SignalProbe<T, S> {
+impl<T, S: Signal> SignalProbe<T, S> {
     pub fn new(signal: &Rc<S>) -> Self {
         SignalProbe::<T, S> {
             signal: Rc::clone(signal),

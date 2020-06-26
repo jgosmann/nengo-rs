@@ -4,12 +4,15 @@ use pyo3::prelude::*;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
 
-pub trait Signal<T> {
+pub trait Signal {
     fn name(&self) -> &String;
-    fn get(&self) -> &T;
-    fn get_mut(&self) -> &mut T;
     fn shape(&self) -> &[Ix];
     fn reset(&mut self);
+}
+
+pub trait Get<T> {
+    fn get(&self) -> &T;
+    fn get_mut(&self) -> &mut T;
 }
 
 pub struct ScalarSignal<T> {
@@ -28,17 +31,9 @@ impl<T> ScalarSignal<T> {
     }
 }
 
-impl<T> Signal<T> for ScalarSignal<T> {
+impl<T> Signal for ScalarSignal<T> {
     fn name(&self) -> &String {
         &self.name
-    }
-
-    fn get(&self) -> &T {
-        &self.value
-    }
-
-    fn get_mut(&self) -> &mut T {
-        &mut self.value
     }
 
     fn shape(&self) -> &[Ix] {
@@ -47,6 +42,16 @@ impl<T> Signal<T> for ScalarSignal<T> {
 
     fn reset(&mut self) {
         self.value = self.initial_value;
+    }
+}
+
+impl<T> Get<T> for ScalarSignal<T> {
+    fn get(&self) -> &T {
+        &self.value
+    }
+
+    fn get_mut(&self) -> &mut T {
+        &mut self.value
     }
 }
 
@@ -73,17 +78,9 @@ impl<T: TypeNum> ArraySignal<T> {
     }
 }
 
-impl<T: TypeNum> Signal<ArrayD<T>> for ArraySignal<T> {
+impl<T: TypeNum> Signal for ArraySignal<T> {
     fn name(&self) -> &String {
         &self.name
-    }
-
-    fn get(&self) -> &ArrayD<T> {
-        &self.buffer.borrow()
-    }
-
-    fn get_mut(&self) -> &mut ArrayD<T> {
-        &mut self.buffer.borrow_mut()
     }
 
     fn shape(&self) -> &[Ix] {
@@ -95,5 +92,15 @@ impl<T: TypeNum> Signal<ArrayD<T>> for ArraySignal<T> {
         let py = gil.python();
         self.get_mut()
             .assign(&self.initial_value.as_ref(py).as_array())
+    }
+}
+
+impl<T: TypeNum> Get<ArrayD<T>> for ArraySignal<T> {
+    fn get(&self) -> &ArrayD<T> {
+        &self.buffer.borrow()
+    }
+
+    fn get_mut(&self) -> &mut ArrayD<T> {
+        &mut self.buffer.borrow_mut()
     }
 }

@@ -1,5 +1,5 @@
 use crate::operator::Operator;
-use crate::signal::{ScalarSignal, Signal};
+use crate::signal::{Get, ScalarSignal};
 use std::rc::Rc;
 
 pub struct TimeUpdate<T, S> {

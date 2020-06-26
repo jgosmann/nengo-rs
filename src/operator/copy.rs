@@ -1,5 +1,5 @@
 use crate::operator::Operator;
-use crate::signal::{ArraySignal, ScalarSignal, Signal};
+use crate::signal::{ArraySignal, Get, ScalarSignal};
 use ndarray::ArrayD;
 use numpy::TypeNum;
 use std::marker::PhantomData;

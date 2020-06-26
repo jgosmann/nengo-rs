@@ -1,5 +1,5 @@
 use crate::operator::Operator;
-use crate::signal::{ArraySignal, Signal};
+use crate::signal::{ArraySignal, Get};
 use core::ops::{AddAssign, Mul};
 use numpy::TypeNum;
 use std::rc::Rc;

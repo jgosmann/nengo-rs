@@ -1,12 +1,12 @@
 use crate::operator::Operator;
-use crate::signal::{ArraySignal, ScalarSignal, Signal};
+use crate::signal::{ArraySignal, Get, ScalarSignal, Signal};
 use ndarray::ArrayD;
 use numpy::TypeNum;
 use std::rc::Rc;
 
 pub struct Reset<T, S>
 where
-    S: Signal<T>,
+    S: Signal,
 {
     pub value: T,
     pub target: Rc<S>,
