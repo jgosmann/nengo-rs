@@ -3,9 +3,12 @@ use numpy::{PyArrayDyn, TypeNum};
 use pyo3::prelude::*;
 use std::any::Any;
 use std::cell::{Ref, RefCell, RefMut};
+use std::fmt::Debug;
+use std::rc::Rc;
 
-pub trait Signal {
+pub trait Signal: Debug {
     fn as_any(&self) -> &dyn Any;
+    fn as_any_rc(self: Rc<Self>) -> Rc<dyn Any>;
     fn name(&self) -> &String;
     fn shape(&self) -> &[Ix];
     fn reset(&self);
@@ -16,6 +19,7 @@ pub trait Get<T> {
     fn get_mut(&self) -> RefMut<T>;
 }
 
+#[derive(Debug)]
 pub struct ScalarSignal<T> {
     name: String,
     value: RefCell<T>,
@@ -32,8 +36,12 @@ impl<T: Copy> ScalarSignal<T> {
     }
 }
 
-impl<T: Copy + 'static> Signal for ScalarSignal<T> {
+impl<T: Copy + Debug + 'static> Signal for ScalarSignal<T> {
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_rc(self: Rc<Self>) -> Rc<dyn Any> {
         self
     }
 
@@ -60,6 +68,7 @@ impl<T> Get<T> for ScalarSignal<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct ArraySignal<T: TypeNum> {
     name: String,
     buffer: RefCell<ArrayD<T>>,
@@ -85,6 +94,10 @@ impl<T: TypeNum> ArraySignal<T> {
 
 impl<T: TypeNum + 'static> Signal for ArraySignal<T> {
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_rc(self: Rc<Self>) -> Rc<dyn Any> {
         self
     }
 

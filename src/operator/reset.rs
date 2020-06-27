@@ -2,6 +2,7 @@ use crate::operator::Operator;
 use crate::signal::{ArraySignal, Get, ScalarSignal, Signal};
 use ndarray::ArrayD;
 use numpy::TypeNum;
+use std::fmt::Debug;
 use std::rc::Rc;
 
 pub struct Reset<T, S>
@@ -18,7 +19,7 @@ impl<T: TypeNum + 'static> Operator for Reset<ArrayD<T>, ArraySignal<T>> {
     }
 }
 
-impl<T: Copy + 'static> Operator for Reset<T, ScalarSignal<T>> {
+impl<T: Copy + Debug + 'static> Operator for Reset<T, ScalarSignal<T>> {
     fn step(&self) {
         *self.target.get_mut() = self.value;
     }

@@ -126,7 +126,8 @@ impl RsReset {
             RsOperator {
                 operator: Rc::new(Reset::<ArrayD<f64>, ArraySignal<f64>> {
                     value,
-                    target: Rc::clone(target.signal.as_any().downcast_ref().unwrap()),
+                    target: Rc::downcast::<ArraySignal<f64>>(Rc::clone(&target.signal).as_any_rc())
+                        .unwrap(),
                 }),
             },
         ))
@@ -149,8 +150,14 @@ impl RsTimeUpdate {
             RsOperator {
                 operator: Rc::new(TimeUpdate::<f64, u64> {
                     dt,
-                    step_target: Rc::clone(step_target.signal.as_any().downcast_ref().unwrap()),
-                    time_target: Rc::clone(time_target.signal.as_any().downcast_ref().unwrap()),
+                    step_target: Rc::downcast::<ScalarSignal<u64>>(
+                        Rc::clone(&step_target.signal).as_any_rc(),
+                    )
+                    .unwrap(),
+                    time_target: Rc::downcast::<ScalarSignal<f64>>(
+                        Rc::clone(&time_target.signal).as_any_rc(),
+                    )
+                    .unwrap(),
                 }),
             },
         ))
@@ -168,9 +175,12 @@ impl RsElementwiseInc {
             Self {},
             RsOperator {
                 operator: Rc::new(ElementwiseInc::<f64> {
-                    target: Rc::clone(target.signal.as_any().downcast_ref().unwrap()),
-                    left: Rc::clone(left.signal.as_any().downcast_ref().unwrap()),
-                    right: Rc::clone(right.signal.as_any().downcast_ref().unwrap()),
+                    target: Rc::downcast::<ArraySignal<f64>>(Rc::clone(&target.signal).as_any_rc())
+                        .unwrap(),
+                    left: Rc::downcast::<ArraySignal<f64>>(Rc::clone(&left.signal).as_any_rc())
+                        .unwrap(),
+                    right: Rc::downcast::<ArraySignal<f64>>(Rc::clone(&right.signal).as_any_rc())
+                        .unwrap(),
                 }),
             },
         ))
@@ -188,8 +198,10 @@ impl RsCopy {
             Self {},
             RsOperator {
                 operator: Rc::new(CopyOp::<ArrayD<f64>, ArraySignal<f64>> {
-                    src: Rc::clone(src.signal.as_any().downcast_ref().unwrap()),
-                    dst: Rc::clone(dst.signal.as_any().downcast_ref().unwrap()),
+                    src: Rc::downcast::<ArraySignal<f64>>(Rc::clone(&src.signal).as_any_rc())
+                        .unwrap(),
+                    dst: Rc::downcast::<ArraySignal<f64>>(Rc::clone(&dst.signal).as_any_rc())
+                        .unwrap(),
                     data_type: PhantomData,
                 }),
             },
@@ -204,13 +216,14 @@ impl RsProbe {
         Ok(Self {
             probe: Rc::new(RefCell::new(
                 SignalProbe::<ArrayD<f64>, ArraySignal<f64>>::new(
-                    target.signal.as_any().downcast_ref().unwrap(),
+                    &Rc::downcast::<ArraySignal<f64>>(Rc::clone(&target.signal).as_any_rc())
+                        .unwrap(),
                 ),
             )),
         })
     }
 
-    fn get_probe_data(&self) -> PyResult<PyObject> {
+    fn get_data(&self) -> PyResult<PyObject> {
         let gil = Python::acquire_gil();
         let py = gil.python();
         self.probe
