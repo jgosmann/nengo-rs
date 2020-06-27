@@ -17,7 +17,7 @@ impl<T: TypeNum> Operator for CopyOp<ArrayD<T>, ArraySignal<T>> {
     }
 }
 
-impl<T> Operator for CopyOp<T, ScalarSignal<T>> {
+impl<T: Copy> Operator for CopyOp<T, ScalarSignal<T>> {
     fn step(&self) {
         *self.dst.get_mut() = *self.src.get();
     }

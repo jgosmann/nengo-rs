@@ -12,13 +12,13 @@ where
     pub target: Rc<S>,
 }
 
-impl<T: TypeNum> Operator for Reset<ArrayD<T>, ArraySignal<T>> {
+impl<T: TypeNum + 'static> Operator for Reset<ArrayD<T>, ArraySignal<T>> {
     fn step(&self) {
         self.target.get_mut().assign(&self.value);
     }
 }
 
-impl<T> Operator for Reset<T, ScalarSignal<T>> {
+impl<T: Copy + 'static> Operator for Reset<T, ScalarSignal<T>> {
     fn step(&self) {
         *self.target.get_mut() = self.value;
     }

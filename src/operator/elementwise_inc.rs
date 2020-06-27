@@ -18,8 +18,8 @@ where
     T: TypeNum + Mul<T, Output = T> + AddAssign<T>,
 {
     fn step(&self) {
-        let left = self.left.get();
-        let right = self.right.get();
+        let left = &(*self.left.get());
+        let right = &(*self.right.get());
         let mut target = self.target.get_mut();
         *target += &(left * right);
     }

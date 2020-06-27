@@ -2,131 +2,251 @@ use crate::operator::{CopyOp, ElementwiseInc, Operator, Reset, TimeUpdate};
 use crate::probe::{Probe, SignalProbe};
 use crate::signal::{ArraySignal, Get, ScalarSignal, Signal};
 use ndarray::ArrayD;
-use numpy::{PyArrayDyn, ToPyArray};
-use pyo3::exceptions;
+use numpy::PyArrayDyn;
 use pyo3::prelude::*;
-use std::any::Any;
-use std::collections::HashMap;
+use pyo3::PyClass;
+use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
 #[pyclass]
-struct PyRefToRust {
-    wrapped: Box<dyn Any + 'static>,
+pub struct RsSignal {
+    signal: Rc<dyn Signal>,
 }
 
-impl PyRefToRust {
-    fn new(wrapped: Box<dyn Any>) -> Self {
-        PyRefToRust { wrapped }
-    }
+#[pyclass]
+pub struct RsOperator {
+    operator: Rc<dyn Operator>,
+}
 
-    fn get_wrapped<T>(&self) -> &'static T {
-        &(*self.wrapped.downcast::<T>().unwrap())
+#[pyclass]
+pub struct RsProbe {
+    probe: Rc<RefCell<dyn Probe>>,
+}
+
+trait Wrapper<T> {
+    fn get(&self) -> &T;
+}
+
+impl Wrapper<Rc<dyn Signal>> for RsSignal {
+    fn get(&self) -> &Rc<dyn Signal> {
+        &self.signal
     }
 }
 
-pub struct Engine {
-    dt: f64,
-    signals: Vec<Box<Rc<dyn Signal>>>,
-    operators: Vec<Box<dyn Operator>>,
-    probes: Vec<Box<dyn Probe>>,
-    step: Rc<ScalarSignal<u64>>,
-    time: Rc<ScalarSignal<f64>>,
+impl Wrapper<Rc<dyn Operator>> for RsOperator {
+    fn get(&self) -> &Rc<dyn Operator> {
+        &self.operator
+    }
+}
+impl Wrapper<Rc<RefCell<dyn Probe>>> for RsProbe {
+    fn get(&self) -> &Rc<RefCell<dyn Probe>> {
+        &self.probe
+    }
 }
 
-impl Engine {
-    pub fn new(dt: f64) -> Self {
-        // FIXME provide signals and ops size on construction
-        Engine {
-            dt,
-            signals: Vec::new(),
-            operators: Vec::new(),
-            probes: Vec::new(),
-            step: Rc::new(ScalarSignal::new("step".to_string(), 0)),
-            time: Rc::new(ScalarSignal::new("time".to_string(), 0.)),
-        }
-    }
+#[pyclass(extends=RsSignal)]
+pub struct RsSignalArrayF64 {}
 
-    fn create_signal(signal: &PyAny) -> PyResult<PyRefToRust> {
+#[pymethods]
+impl RsSignalArrayF64 {
+    #[new]
+    fn new(signal: &PyAny) -> PyResult<(Self, RsSignal)> {
         let name = signal.getattr("name")?.extract()?;
         let initial_value = signal.getattr("initial_value")?;
         let initial_value: &PyArrayDyn<f64> = initial_value.extract()?;
-        let rust_signal = Rc::new(ArraySignal::new(name, initial_value));
-        Ok(PyRefToRust {
-            wrapped: Box::new(rust_signal),
+        let signal = Rc::new(ArraySignal::new(name, initial_value));
+        Ok((Self {}, RsSignal { signal }))
+    }
+}
+
+#[pyclass(extends=RsSignal)]
+pub struct RsSignalU64 {}
+
+#[pymethods]
+impl RsSignalU64 {
+    #[new]
+    fn new(name: String, initial_value: u64) -> PyResult<(Self, RsSignal)> {
+        Ok((
+            Self {},
+            RsSignal {
+                signal: Rc::new(ScalarSignal::new(name, initial_value)),
+            },
+        ))
+    }
+
+    fn get(py_self: PyRef<Self>) -> u64 {
+        *py_self
+            .as_ref()
+            .signal
+            .as_any()
+            .downcast_ref::<ScalarSignal<u64>>()
+            .unwrap()
+            .get()
+    }
+}
+
+#[pyclass(extends=RsSignal)]
+pub struct RsSignalF64 {}
+
+#[pymethods]
+impl RsSignalF64 {
+    #[new]
+    fn new(name: String, initial_value: f64) -> PyResult<(Self, RsSignal)> {
+        Ok((
+            Self {},
+            RsSignal {
+                signal: Rc::new(ScalarSignal::new(name, initial_value)),
+            },
+        ))
+    }
+
+    fn get(py_self: PyRef<Self>) -> f64 {
+        *py_self
+            .as_ref()
+            .signal
+            .as_any()
+            .downcast_ref::<ScalarSignal<f64>>()
+            .unwrap()
+            .get()
+    }
+}
+
+#[pyclass(extends=RsOperator)]
+pub struct RsReset {}
+
+#[pymethods]
+impl RsReset {
+    #[new]
+    fn new(value: &PyAny, target: &RsSignal) -> PyResult<(Self, RsOperator)> {
+        let value: &PyArrayDyn<f64> = value.extract()?;
+        let value = value.to_owned_array();
+        Ok((
+            Self {},
+            RsOperator {
+                operator: Rc::new(Reset::<ArrayD<f64>, ArraySignal<f64>> {
+                    value,
+                    target: Rc::clone(target.signal.as_any().downcast_ref().unwrap()),
+                }),
+            },
+        ))
+    }
+}
+
+#[pyclass(extends=RsOperator)]
+pub struct RsTimeUpdate {}
+
+#[pymethods]
+impl RsTimeUpdate {
+    #[new]
+    fn new(
+        dt: f64,
+        step_target: &RsSignal,
+        time_target: &RsSignal,
+    ) -> PyResult<(Self, RsOperator)> {
+        Ok((
+            Self {},
+            RsOperator {
+                operator: Rc::new(TimeUpdate::<f64, u64> {
+                    dt,
+                    step_target: Rc::clone(step_target.signal.as_any().downcast_ref().unwrap()),
+                    time_target: Rc::clone(time_target.signal.as_any().downcast_ref().unwrap()),
+                }),
+            },
+        ))
+    }
+}
+
+#[pyclass(extends=RsOperator)]
+pub struct RsElementwiseInc {}
+
+#[pymethods]
+impl RsElementwiseInc {
+    #[new]
+    fn new(target: &RsSignal, left: &RsSignal, right: &RsSignal) -> PyResult<(Self, RsOperator)> {
+        Ok((
+            Self {},
+            RsOperator {
+                operator: Rc::new(ElementwiseInc::<f64> {
+                    target: Rc::clone(target.signal.as_any().downcast_ref().unwrap()),
+                    left: Rc::clone(left.signal.as_any().downcast_ref().unwrap()),
+                    right: Rc::clone(right.signal.as_any().downcast_ref().unwrap()),
+                }),
+            },
+        ))
+    }
+}
+
+#[pyclass(extends=RsOperator)]
+pub struct RsCopy {}
+
+#[pymethods]
+impl RsCopy {
+    #[new]
+    fn new(src: &RsSignal, dst: &RsSignal) -> PyResult<(Self, RsOperator)> {
+        Ok((
+            Self {},
+            RsOperator {
+                operator: Rc::new(CopyOp::<ArrayD<f64>, ArraySignal<f64>> {
+                    src: Rc::clone(src.signal.as_any().downcast_ref().unwrap()),
+                    dst: Rc::clone(dst.signal.as_any().downcast_ref().unwrap()),
+                    data_type: PhantomData,
+                }),
+            },
+        ))
+    }
+}
+
+#[pymethods]
+impl RsProbe {
+    #[new]
+    fn new(target: &RsSignal) -> PyResult<Self> {
+        Ok(Self {
+            probe: Rc::new(RefCell::new(
+                SignalProbe::<ArrayD<f64>, ArraySignal<f64>>::new(
+                    target.signal.as_any().downcast_ref().unwrap(),
+                ),
+            )),
         })
     }
 
-    // fn add_signal<'a>(&mut self, signal: &PyAny) -> PyResult<()> {
-    //     let name = signal.getattr("name")?.extract()?;
-    //     let initial_value = signal.getattr("initial_value")?;
-    //     match signal.getattr("dtype")?.getattr("name")?.extract()? {
-    //         "float64" => {
-    //             let initial_value: &PyArrayDyn<f64> = initial_value.extract()?;
-    //             let rust_signal = Rc::new(ArraySignal::new(name, initial_value));
-    //             self.signals.insert(signal.into(), Box::new(rust_signal));
-    //             Ok(())
-    //         }
-    //         "int64" => {
-    //             let initial_value: &PyArrayDyn<i64> = initial_value.extract()?;
-    //             self.signals
-    //                 .map_i64
-    //                 .push(Rc::new(ArraySignal::new(name, initial_value)));
-    //             Ok(self.signals.map_i64.len() - 1)
-    //         }
-    //         dtype => Err(PyErr::new::<exceptions::TypeError, _>(format!(
-    //             "incompatible dtype: {}",
-    //             dtype
-    //         ))),
-    //     }
-    // }
-
-    fn push_reset(&mut self, value: &PyAny, target: &PyRefToRust) -> PyResult<()> {
-        let value: &PyArrayDyn<f64> = value.extract()?;
-        let value = value.to_owned_array();
-        self.operators
-            .push(Box::new(Reset::<ArrayD<f64>, ArraySignal<f64>> {
-                value,
-                target: Rc::clone(target.get_wrapped()),
-            }));
-        Ok(())
+    fn get_probe_data(&self) -> PyResult<PyObject> {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        self.probe
+            .borrow()
+            .as_any()
+            .downcast_ref::<SignalProbe<ArrayD<f64>, ArraySignal<f64>>>()
+            .unwrap()
+            .get_data(py)
     }
+}
 
-    fn push_time_update(
-        &mut self,
-        step_target: &PyRefToRust,
-        time_target: &PyRefToRust,
-    ) -> PyResult<()> {
-        self.operators.push(Box::new(TimeUpdate {
-            dt: self.dt,
-            step_target: Rc::clone(step_target.get_wrapped()),
-            time_target: Rc::clone(time_target.get_wrapped()),
-        }));
-        Ok(())
-    }
+#[pyclass]
+pub struct Engine {
+    signals: Vec<Rc<dyn Signal>>,
+    operators: Vec<Rc<dyn Operator>>,
+    probes: Vec<Rc<RefCell<dyn Probe>>>,
+}
 
-    fn push_elementwise_inc(
-        &mut self,
-        target: &PyRefToRust,
-        left: &PyRefToRust,
-        right: &PyRefToRust,
-    ) -> PyResult<()> {
-        self.operators.push(Box::new(ElementwiseInc::<f64> {
-            target: Rc::clone(target.get_wrapped()),
-            left: Rc::clone(left.get_wrapped()),
-            right: Rc::clone(right.get_wrapped()),
-        }));
-        Ok(())
-    }
+#[pymethods]
+impl Engine {
+    #[new]
+    fn new(signals: &PyAny, operators: &PyAny, probes: &PyAny) -> PyResult<Self> {
+        fn from_any<T: PyClass + Wrapper<Rc<U>>, U: ?Sized>(
+            sequence: &Vec<&PyCell<T>>,
+        ) -> Vec<Rc<U>> {
+            sequence
+                .iter()
+                .map(|s| Rc::clone(s.borrow().get()))
+                .collect()
+        }
 
-    fn push_copy(&mut self, src: &PyRefToRust, dst: &PyRefToRust) -> PyResult<()> {
-        self.operators
-            .push(Box::new(CopyOp::<ArrayD<f64>, ArraySignal<f64>> {
-                src: Rc::clone(src.get_wrapped()),
-                dst: Rc::clone(dst.get_wrapped()),
-                data_type: PhantomData,
-            }));
-        Ok(())
+        Ok(Self {
+            signals: from_any::<RsSignal, dyn Signal>(&signals.extract()?),
+            operators: from_any::<RsOperator, dyn Operator>(&operators.extract()?),
+            probes: from_any::<RsProbe, RefCell<dyn Probe>>(&probes.extract()?),
+        })
     }
 
     fn run_step(&mut self) {
@@ -134,7 +254,7 @@ impl Engine {
             op.step();
         }
         for probe in self.probes.iter_mut() {
-            probe.probe();
+            probe.borrow_mut().probe();
         }
     }
 
@@ -148,26 +268,5 @@ impl Engine {
         for s in self.signals.iter() {
             s.reset();
         }
-    }
-
-    fn get_step(&self) -> u64 {
-        *self.step.get()
-    }
-
-    fn get_time(&self) -> f64 {
-        *self.time.get()
-    }
-
-    fn add_probe(&mut self, target: &PyRefToRust) -> usize {
-        self.probes.push(Box::new(SignalProbe::new(
-            target.get_wrapped::<Rc<ArraySignal<f64>>>(),
-        )));
-        self.probes.len() - 1
-    }
-
-    fn get_probe_data(&self, target: usize) -> PyResult<PyObject> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        self.probes[target].get_data(py)
     }
 }

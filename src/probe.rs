@@ -1,11 +1,12 @@
 use crate::signal::{ArraySignal, Get, ScalarSignal, Signal};
-use ndarray::{Array, ArrayD, Axis};
-use numpy::convert::IntoPyArray;
-use numpy::{PyArrayDyn, TypeNum};
+use ndarray::{ArrayD, Axis};
+use numpy::{PyArray, PyArrayDyn, TypeNum};
 use pyo3::prelude::*;
+use std::any::Any;
 use std::rc::Rc;
 
 pub trait Probe {
+    fn as_any(&self) -> &dyn Any;
     fn probe(&mut self);
     fn get_data(&self, py: Python) -> PyResult<PyObject>;
 }
@@ -24,7 +25,11 @@ impl<T, S: Signal> SignalProbe<T, S> {
     }
 }
 
-impl<T: TypeNum> Probe for SignalProbe<ArrayD<T>, ArraySignal<T>> {
+impl<T: TypeNum + 'static> Probe for SignalProbe<ArrayD<T>, ArraySignal<T>> {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn probe(&mut self) {
         self.data.push(self.signal.get().clone())
     }
@@ -42,13 +47,16 @@ impl<T: TypeNum> Probe for SignalProbe<ArrayD<T>, ArraySignal<T>> {
     }
 }
 
-impl<T: TypeNum> Probe for SignalProbe<T, ScalarSignal<T>> {
+impl<T: TypeNum + 'static> Probe for SignalProbe<T, ScalarSignal<T>> {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn probe(&mut self) {
         self.data.push(*self.signal.get());
     }
 
     fn get_data(&self, py: Python) -> PyResult<PyObject> {
-        let copy = Array::from(self.data).into_pyarray(py);
-        Ok(copy.to_object(py))
+        Ok(PyArray::from_slice(py, &self.data).to_object(py))
     }
 }
