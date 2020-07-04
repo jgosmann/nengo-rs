@@ -33,7 +33,6 @@ class Simulator:
                 if signal is not None:
                     signal_to_engine_id[signal] = RsSignalArrayF64(signal)
         x = RsSignalU64("step", 0)
-        print("a", x)
         signal_to_engine_id[self.model.step] = x
         signal_to_engine_id[self.model.time] = RsSignalF64("time", 0.0)
         self._sig_to_ngine_id = signal_to_engine_id
@@ -46,7 +45,6 @@ class Simulator:
         for op in toposorted_dg:
             dependencies = [node_indices[node] for node in dg.backward[op]]
             if isinstance(op, Reset):
-                print(op.dst)
                 ops.append(
                     RsReset(
                         np.asarray(op.value, dtype=np.float64),
@@ -55,7 +53,6 @@ class Simulator:
                     )
                 )
             elif isinstance(op, TimeUpdate):
-                print("b", signal_to_engine_id[self.model.step])
                 ops.append(
                     RsTimeUpdate(
                         dt,
@@ -120,7 +117,6 @@ class Simulator:
 
     def trange(self):
         step = self._sig_to_ngine_id[self.model.step].get()
-        print(step)
         return np.arange(1, step + 1) * self.dt
 
 

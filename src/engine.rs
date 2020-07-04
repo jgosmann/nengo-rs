@@ -3,6 +3,8 @@ use crate::operator::{CopyOp, ElementwiseInc, OperatorNode, Reset, TimeUpdate};
 use crate::probe::{Probe, SignalProbe};
 use crate::signal::{ArraySignal, Get, ScalarSignal, Signal};
 use futures::executor::ThreadPool;
+use futures::stream::FuturesUnordered;
+use futures::stream::StreamExt;
 use ndarray::ArrayD;
 use numpy::PyArrayDyn;
 use pyo3::prelude::*;
@@ -334,9 +336,7 @@ impl Engine {
     }
 
     fn reset(&self) {
-        for s in self.signals.iter() {
-            s.reset();
-        }
+        self.signals.iter().for_each(|s| s.reset());
     }
 }
 
@@ -347,11 +347,20 @@ impl Engine {
         step_finished_indicator: Arc<(Mutex<bool>, Condvar)>,
     ) {
         run_operators(&operators).await;
-        for probe in probes.iter() {
-            probe.write().unwrap().probe();
-        }
+
+        probes
+            .iter()
+            .map(Self::probe_async)
+            .collect::<FuturesUnordered<_>>()
+            .collect::<()>()
+            .await;
+
         let (lock, cvar) = &*step_finished_indicator;
         *lock.lock().unwrap() = true;
         cvar.notify_one();
+    }
+
+    async fn probe_async(probe: &Arc<RwLock<dyn Probe + Send + Sync>>) {
+        probe.write().unwrap().probe();
     }
 }
