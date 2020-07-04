@@ -1,7 +1,7 @@
 from nengo.builder import Model
 from nengo.builder.operator import Copy, ElementwiseInc, Reset, TimeUpdate
 from nengo.cache import get_default_decoder_cache
-from nengo.utils.graphs import toposort
+from nengo.utils.graphs import BidirectionalDAG, toposort
 from nengo.utils.simulator import operator_dependency_graph
 import numpy as np
 
@@ -38,15 +38,20 @@ class Simulator:
         signal_to_engine_id[self.model.time] = RsSignalF64("time", 0.0)
         self._sig_to_ngine_id = signal_to_engine_id
 
-        dg = operator_dependency_graph(self.model.operators)
+        dg = BidirectionalDAG(operator_dependency_graph(self.model.operators))
+        toposorted_dg = toposort(dg.forward)
+        node_indices = {node: idx for idx, node in enumerate(toposorted_dg)}
+
         ops = []
-        for op in toposort(dg):
+        for op in toposorted_dg:
+            dependencies = [node_indices[node] for node in dg.backward[op]]
             if isinstance(op, Reset):
                 print(op.dst)
                 ops.append(
                     RsReset(
                         np.asarray(op.value, dtype=np.float64),
                         signal_to_engine_id[op.dst],
+                        dependencies,
                     )
                 )
             elif isinstance(op, TimeUpdate):
@@ -56,6 +61,7 @@ class Simulator:
                         dt,
                         signal_to_engine_id[self.model.step],
                         signal_to_engine_id[self.model.time],
+                        dependencies,
                     )
                 )
             elif isinstance(op, ElementwiseInc):
@@ -64,12 +70,17 @@ class Simulator:
                         signal_to_engine_id[op.Y],
                         signal_to_engine_id[op.A],
                         signal_to_engine_id[op.X],
+                        dependencies,
                     )
                 )
             elif isinstance(op, Copy):
                 assert op.src_slice is None and op.dst_slice is None
                 ops.append(
-                    RsCopy(signal_to_engine_id[op.src], signal_to_engine_id[op.dst])
+                    RsCopy(
+                        signal_to_engine_id[op.src],
+                        signal_to_engine_id[op.dst],
+                        dependencies,
+                    )
                 )
             else:
                 print("missing:", op)

@@ -3,11 +3,11 @@ use crate::signal::{ArraySignal, Get, ScalarSignal};
 use ndarray::ArrayD;
 use numpy::TypeNum;
 use std::marker::PhantomData;
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct CopyOp<T, S> {
-    pub src: Rc<S>,
-    pub dst: Rc<S>,
+    pub src: Arc<S>,
+    pub dst: Arc<S>,
     pub data_type: PhantomData<T>,
 }
 

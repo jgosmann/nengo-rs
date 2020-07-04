@@ -2,15 +2,15 @@ use crate::operator::Operator;
 use crate::signal::{ArraySignal, Get};
 use core::ops::{AddAssign, Mul};
 use numpy::TypeNum;
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct ElementwiseInc<T>
 where
     T: TypeNum,
 {
-    pub target: Rc<ArraySignal<T>>,
-    pub left: Rc<ArraySignal<T>>,
-    pub right: Rc<ArraySignal<T>>,
+    pub target: Arc<ArraySignal<T>>,
+    pub left: Arc<ArraySignal<T>>,
+    pub right: Arc<ArraySignal<T>>,
 }
 
 impl<T> Operator for ElementwiseInc<T>

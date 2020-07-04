@@ -3,7 +3,7 @@ use ndarray::{ArrayD, Axis};
 use numpy::{PyArray, PyArrayDyn, TypeNum};
 use pyo3::prelude::*;
 use std::any::Any;
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub trait Probe {
     fn as_any(&self) -> &dyn Any;
@@ -12,20 +12,20 @@ pub trait Probe {
 }
 
 pub struct SignalProbe<T, S: Signal> {
-    signal: Rc<S>,
+    signal: Arc<S>,
     data: Vec<T>,
 }
 
 impl<T, S: Signal> SignalProbe<T, S> {
-    pub fn new(signal: &Rc<S>) -> Self {
+    pub fn new(signal: &Arc<S>) -> Self {
         SignalProbe::<T, S> {
-            signal: Rc::clone(signal),
+            signal: Arc::clone(signal),
             data: vec![],
         }
     }
 }
 
-impl<T: TypeNum + 'static> Probe for SignalProbe<ArrayD<T>, ArraySignal<T>> {
+impl<T: TypeNum + Send + Sync + 'static> Probe for SignalProbe<ArrayD<T>, ArraySignal<T>> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -47,7 +47,7 @@ impl<T: TypeNum + 'static> Probe for SignalProbe<ArrayD<T>, ArraySignal<T>> {
     }
 }
 
-impl<T: TypeNum + 'static> Probe for SignalProbe<T, ScalarSignal<T>> {
+impl<T: TypeNum + Send + Sync + 'static> Probe for SignalProbe<T, ScalarSignal<T>> {
     fn as_any(&self) -> &dyn Any {
         self
     }
