@@ -1,5 +1,5 @@
 use crate::operator::Operator;
-use crate::signal::{ArraySignal, Get, ScalarSignal};
+use crate::signal::{ArraySignal, ScalarSignal, SignalAccess};
 use ndarray::ArrayD;
 use numpy::TypeNum;
 use std::marker::PhantomData;
@@ -13,12 +13,12 @@ pub struct CopyOp<T, S> {
 
 impl<T: TypeNum> Operator for CopyOp<ArrayD<T>, ArraySignal<T>> {
     fn step(&self) {
-        self.dst.get_mut().assign(&self.src.get());
+        self.dst.write().assign(&self.src.read());
     }
 }
 
 impl<T: Copy> Operator for CopyOp<T, ScalarSignal<T>> {
     fn step(&self) {
-        *self.dst.get_mut() = *self.src.get();
+        *self.dst.write() = *self.src.read();
     }
 }

@@ -1,13 +1,16 @@
 use crate::operator::run_operators;
 use crate::operator::{CopyOp, ElementwiseInc, OperatorNode, Reset, TimeUpdate};
 use crate::probe::{Probe, SignalProbe};
-use crate::signal::{ArraySignal, Get, ScalarSignal, Signal};
+use crate::signal::{ArraySignal, ScalarSignal, Signal, SignalAccess};
 use futures::executor::ThreadPool;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use ndarray::ArrayD;
 use numpy::PyArrayDyn;
+use pyo3::exceptions as exc;
 use pyo3::prelude::*;
+use pyo3::PyClass;
+use std::any::type_name;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Condvar;
@@ -87,7 +90,7 @@ impl RsSignalU64 {
             .as_any()
             .downcast_ref::<ScalarSignal<u64>>()
             .unwrap()
-            .get()
+            .read()
     }
 }
 
@@ -113,8 +116,22 @@ impl RsSignalF64 {
             .as_any()
             .downcast_ref::<ScalarSignal<f64>>()
             .unwrap()
-            .get()
+            .read()
     }
+}
+
+fn extract_signal<T: Signal + Send + Sync + 'static>(
+    name: &str,
+    signal: &RsSignal,
+) -> PyResult<Arc<T>> {
+    Arc::downcast::<T>(Arc::clone(&signal.signal).as_any_arc()).or(Err(PyErr::new::<
+        exc::TypeError,
+        _,
+    >(format!(
+        "Signal `{}` must be {}.",
+        name,
+        type_name::<T>()
+    ))))
 }
 
 #[pyclass(extends=RsOperator)]
@@ -136,10 +153,7 @@ impl RsReset {
                 node: Arc::new(OperatorNode {
                     operator: Box::new(Reset::<ArrayD<f64>, ArraySignal<f64>> {
                         value,
-                        target: Arc::downcast::<ArraySignal<f64>>(
-                            Arc::clone(&target.signal).as_any_rc(),
-                        )
-                        .unwrap(),
+                        target: extract_signal("target", target)?,
                     }),
                     dependencies,
                 }),
@@ -166,14 +180,8 @@ impl RsTimeUpdate {
                 node: Arc::new(OperatorNode {
                     operator: Box::new(TimeUpdate::<f64, u64> {
                         dt,
-                        step_target: Arc::downcast::<ScalarSignal<u64>>(
-                            Arc::clone(&step_target.signal).as_any_rc(),
-                        )
-                        .unwrap(),
-                        time_target: Arc::downcast::<ScalarSignal<f64>>(
-                            Arc::clone(&time_target.signal).as_any_rc(),
-                        )
-                        .unwrap(),
+                        step_target: extract_signal("step_target", step_target)?,
+                        time_target: extract_signal("time_target", time_target)?,
                     }),
                     dependencies,
                 }),
@@ -199,18 +207,9 @@ impl RsElementwiseInc {
             RsOperator {
                 node: Arc::new(OperatorNode {
                     operator: Box::new(ElementwiseInc::<f64> {
-                        target: Arc::downcast::<ArraySignal<f64>>(
-                            Arc::clone(&target.signal).as_any_rc(),
-                        )
-                        .unwrap(),
-                        left: Arc::downcast::<ArraySignal<f64>>(
-                            Arc::clone(&left.signal).as_any_rc(),
-                        )
-                        .unwrap(),
-                        right: Arc::downcast::<ArraySignal<f64>>(
-                            Arc::clone(&right.signal).as_any_rc(),
-                        )
-                        .unwrap(),
+                        target: extract_signal("target", target)?,
+                        left: extract_signal("left", left)?,
+                        right: extract_signal("right", right)?,
                     }),
                     dependencies,
                 }),
@@ -235,10 +234,8 @@ impl RsCopy {
             RsOperator {
                 node: Arc::new(OperatorNode {
                     operator: Box::new(CopyOp::<ArrayD<f64>, ArraySignal<f64>> {
-                        src: Arc::downcast::<ArraySignal<f64>>(Arc::clone(&src.signal).as_any_rc())
-                            .unwrap(),
-                        dst: Arc::downcast::<ArraySignal<f64>>(Arc::clone(&dst.signal).as_any_rc())
-                            .unwrap(),
+                        src: extract_signal("src", src)?,
+                        dst: extract_signal("dst", dst)?,
                         data_type: PhantomData,
                     }),
                     dependencies,
@@ -254,10 +251,9 @@ impl RsProbe {
     fn new(target: &RsSignal) -> PyResult<Self> {
         Ok(Self {
             probe: Arc::new(RwLock::new(
-                SignalProbe::<ArrayD<f64>, ArraySignal<f64>>::new(
-                    &Arc::downcast::<ArraySignal<f64>>(Arc::clone(&target.signal).as_any_rc())
-                        .unwrap(),
-                ),
+                SignalProbe::<ArrayD<f64>, ArraySignal<f64>>::new(&extract_signal(
+                    "target", target,
+                )?),
             )),
         })
     }
@@ -286,28 +282,16 @@ pub struct Engine {
 impl Engine {
     #[new]
     fn new(signals: &PyAny, operators: &PyAny, probes: &PyAny) -> PyResult<Self> {
-        let signals: Vec<&PyCell<RsSignal>> = signals.extract()?;
-        let signals: Vec<Arc<dyn Signal + Send + Sync>> = signals
-            .iter()
-            .map(|s| Arc::clone(s.borrow().get()))
-            .collect();
-
-        let operators: Vec<&PyCell<RsOperator>> = operators.extract()?;
-        let operators: Vec<Arc<OperatorNode>> = operators
-            .iter()
-            .map(|o| Arc::clone(o.borrow().get()))
-            .collect();
-
-        let probes: Vec<&PyCell<RsProbe>> = probes.extract()?;
-        let probes: Vec<Arc<RwLock<dyn Probe + Send + Sync>>> = probes
-            .iter()
-            .map(|p| Arc::clone(p.borrow().get()))
-            .collect();
+        fn py_cells_to_pure_rust<T: PyClass + Wrapper<Arc<U>>, U: ?Sized>(
+            cells: &Vec<&PyCell<T>>,
+        ) -> Vec<Arc<U>> {
+            cells.iter().map(|c| Arc::clone(c.borrow().get())).collect()
+        }
 
         Ok(Self {
-            signals,
-            operators,
-            probes,
+            signals: py_cells_to_pure_rust::<RsSignal, _>(&signals.extract()?),
+            operators: py_cells_to_pure_rust::<RsOperator, _>(&operators.extract()?),
+            probes: py_cells_to_pure_rust::<RsProbe, _>(&probes.extract()?),
             thread_pool: ThreadPool::new().unwrap(),
             step_finished_indicator: Arc::new((Mutex::new(false), Condvar::new())),
         })

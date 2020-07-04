@@ -27,7 +27,7 @@ pub async fn run_operators(nodes: &Vec<Arc<OperatorNode>>) {
         let dependencies = node
             .dependencies
             .iter()
-            .map(|i| Shared::clone(tasks.get(*i).unwrap()))
+            .map(|i| Shared::clone(&tasks[*i]))
             .collect::<FuturesUnordered<_>>();
         tasks.push(
             create_future(&(*node.operator), dependencies)

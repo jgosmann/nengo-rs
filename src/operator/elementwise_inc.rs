@@ -1,5 +1,5 @@
 use crate::operator::Operator;
-use crate::signal::{ArraySignal, Get};
+use crate::signal::{ArraySignal, SignalAccess};
 use core::ops::{AddAssign, Mul};
 use numpy::TypeNum;
 use std::sync::Arc;
@@ -18,9 +18,9 @@ where
     T: TypeNum + Mul<T, Output = T> + AddAssign<T>,
 {
     fn step(&self) {
-        let left = &(*self.left.get());
-        let right = &(*self.right.get());
-        let mut target = self.target.get_mut();
+        let left = &(*self.left.read());
+        let right = &(*self.right.read());
+        let mut target = self.target.write();
         *target += &(left * right);
     }
 }

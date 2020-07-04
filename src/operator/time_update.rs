@@ -1,5 +1,5 @@
 use crate::operator::Operator;
-use crate::signal::{Get, ScalarSignal};
+use crate::signal::{ScalarSignal, SignalAccess};
 use std::sync::Arc;
 
 pub struct TimeUpdate<T, S> {
@@ -10,7 +10,7 @@ pub struct TimeUpdate<T, S> {
 
 impl Operator for TimeUpdate<f64, u64> {
     fn step(&self) {
-        *self.step_target.get_mut() += 1;
-        *self.time_target.get_mut() = *self.step_target.get() as f64 * self.dt;
+        *self.step_target.write() += 1;
+        *self.time_target.write() = *self.step_target.read() as f64 * self.dt;
     }
 }

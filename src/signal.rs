@@ -8,17 +8,19 @@ use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
 
+type AnySignal = dyn Any + Send + Sync;
+
 pub trait Signal: Debug {
     fn as_any(&self) -> &dyn Any;
-    fn as_any_rc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
+    fn as_any_arc(self: Arc<Self>) -> Arc<AnySignal>;
     fn name(&self) -> &String;
     fn shape(&self) -> &[Ix];
     fn reset(&self);
 }
 
-pub trait Get<T> {
-    fn get(&self) -> RwLockReadGuard<T>;
-    fn get_mut(&self) -> RwLockWriteGuard<T>;
+pub trait SignalAccess<T> {
+    fn read(&self) -> RwLockReadGuard<T>;
+    fn write(&self) -> RwLockWriteGuard<T>;
 }
 
 #[derive(Debug)]
@@ -43,7 +45,7 @@ impl<T: Copy + Send + Sync + Debug + 'static> Signal for ScalarSignal<T> {
         self
     }
 
-    fn as_any_rc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+    fn as_any_arc(self: Arc<Self>) -> Arc<AnySignal> {
         self
     }
 
@@ -60,12 +62,12 @@ impl<T: Copy + Send + Sync + Debug + 'static> Signal for ScalarSignal<T> {
     }
 }
 
-impl<T> Get<T> for ScalarSignal<T> {
-    fn get(&self) -> RwLockReadGuard<T> {
+impl<T> SignalAccess<T> for ScalarSignal<T> {
+    fn read(&self) -> RwLockReadGuard<T> {
         self.value.read().unwrap()
     }
 
-    fn get_mut(&self) -> RwLockWriteGuard<T> {
+    fn write(&self) -> RwLockWriteGuard<T> {
         self.value.write().unwrap()
     }
 }
@@ -99,7 +101,7 @@ impl<T: TypeNum + Send + Sync + 'static> Signal for ArraySignal<T> {
         self
     }
 
-    fn as_any_rc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+    fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
         self
     }
 
@@ -121,12 +123,12 @@ impl<T: TypeNum + Send + Sync + 'static> Signal for ArraySignal<T> {
     }
 }
 
-impl<T: TypeNum> Get<ArrayD<T>> for ArraySignal<T> {
-    fn get(&self) -> RwLockReadGuard<ArrayD<T>> {
+impl<T: TypeNum> SignalAccess<ArrayD<T>> for ArraySignal<T> {
+    fn read(&self) -> RwLockReadGuard<ArrayD<T>> {
         self.buffer.read().unwrap()
     }
 
-    fn get_mut(&self) -> RwLockWriteGuard<ArrayD<T>> {
+    fn write(&self) -> RwLockWriteGuard<ArrayD<T>> {
         self.buffer.write().unwrap()
     }
 }

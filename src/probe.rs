@@ -1,4 +1,4 @@
-use crate::signal::{ArraySignal, Get, ScalarSignal, Signal};
+use crate::signal::{ArraySignal, ScalarSignal, Signal, SignalAccess};
 use ndarray::{ArrayD, Axis};
 use numpy::{PyArray, PyArrayDyn, TypeNum};
 use pyo3::prelude::*;
@@ -31,7 +31,7 @@ impl<T: TypeNum + Send + Sync + 'static> Probe for SignalProbe<ArrayD<T>, ArrayS
     }
 
     fn probe(&mut self) {
-        self.data.push(self.signal.get().clone())
+        self.data.push(self.signal.read().clone())
     }
 
     fn get_data(&self, py: Python) -> PyResult<PyObject> {
@@ -53,7 +53,7 @@ impl<T: TypeNum + Send + Sync + 'static> Probe for SignalProbe<T, ScalarSignal<T
     }
 
     fn probe(&mut self) {
-        self.data.push(*self.signal.get());
+        self.data.push(*self.signal.read());
     }
 
     fn get_data(&self, py: Python) -> PyResult<PyObject> {
