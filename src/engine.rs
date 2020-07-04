@@ -3,6 +3,7 @@ use crate::operator::{CopyOp, ElementwiseInc, OperatorNode, Reset, TimeUpdate};
 use crate::probe::{Probe, SignalProbe};
 use crate::signal::{ArraySignal, ScalarSignal, Signal, SignalAccess};
 use futures::executor::ThreadPool;
+use futures::future::Future;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use ndarray::ArrayD;
@@ -269,13 +270,47 @@ impl RsProbe {
     }
 }
 
+struct Event(Mutex<bool>, Condvar);
+
+impl Event {
+    pub fn new() -> Self {
+        Event(Mutex::new(false), Condvar::new())
+    }
+
+    pub fn clear(&self) {
+        self.set_value(false);
+    }
+
+    pub fn set(&self) {
+        self.set_value(true);
+    }
+
+    fn set_value(&self, value: bool) {
+        let Event(lock, cvar) = self;
+        let mut finished = lock.lock().unwrap();
+        if *finished != value {
+            *finished = value;
+            cvar.notify_all();
+        }
+    }
+
+    pub fn wait(&self) {
+        let Event(lock, cvar) = self;
+        let mut finished = lock.lock().unwrap();
+
+        while !*finished {
+            finished = cvar.wait(finished).unwrap();
+        }
+    }
+}
+
 #[pyclass]
 pub struct Engine {
     signals: Vec<Arc<dyn Signal + Send + Sync>>,
     operators: Vec<Arc<OperatorNode>>,
     probes: Vec<Arc<RwLock<dyn Probe + Send + Sync>>>,
     thread_pool: ThreadPool,
-    step_finished_indicator: Arc<(Mutex<bool>, Condvar)>,
+    is_done: Arc<Event>,
 }
 
 #[pymethods]
@@ -293,24 +328,15 @@ impl Engine {
             operators: py_cells_to_pure_rust::<RsOperator, _>(&operators.extract()?),
             probes: py_cells_to_pure_rust::<RsProbe, _>(&probes.extract()?),
             thread_pool: ThreadPool::new().unwrap(),
-            step_finished_indicator: Arc::new((Mutex::new(false), Condvar::new())),
+            is_done: Arc::new(Event::new()),
         })
     }
 
     fn run_step(&self) {
-        let (lock, cvar) = &*self.step_finished_indicator;
-        let mut finished = lock.lock().unwrap();
-        *finished = false;
-
-        self.thread_pool.spawn_ok(Self::run_step_async(
+        self.run_threaded(Self::run_step_async(
             self.operators.clone(),
             self.probes.clone(),
-            Arc::clone(&self.step_finished_indicator),
         ));
-
-        while !*finished {
-            finished = cvar.wait(finished).unwrap();
-        }
     }
 
     fn run_steps(&self, n_steps: i64) {
@@ -325,23 +351,32 @@ impl Engine {
 }
 
 impl Engine {
+    fn run_threaded<Fut: Future<Output = ()> + Send + 'static>(&self, fut: Fut) {
+        self.is_done.clear();
+        self.thread_pool
+            .spawn_ok(Self::notify_when_done(fut, Arc::clone(&self.is_done)));
+        self.is_done.wait();
+    }
+
+    async fn notify_when_done<Fut: Future<Output = ()> + Send + 'static>(
+        fut: Fut,
+        is_done: Arc<Event>,
+    ) {
+        fut.await;
+        is_done.set();
+    }
+
     async fn run_step_async(
         operators: Vec<Arc<OperatorNode>>,
         probes: Vec<Arc<RwLock<dyn Probe + Send + Sync>>>,
-        step_finished_indicator: Arc<(Mutex<bool>, Condvar)>,
     ) {
         run_operators(&operators).await;
-
         probes
             .iter()
             .map(Self::probe_async)
             .collect::<FuturesUnordered<_>>()
             .collect::<()>()
             .await;
-
-        let (lock, cvar) = &*step_finished_indicator;
-        *lock.lock().unwrap() = true;
-        cvar.notify_one();
     }
 
     async fn probe_async(probe: &Arc<RwLock<dyn Probe + Send + Sync>>) {
