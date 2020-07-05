@@ -6,7 +6,7 @@ from nengo.utils.simulator import operator_dependency_graph
 import numpy as np
 
 from .engine import (
-    Engine,
+    RsEngine,
     RsSignalArrayF64,
     RsSignalF64,
     RsSignalU64,
@@ -88,7 +88,7 @@ class Simulator:
                 signal_to_engine_id[self.model.sig[probe]["in"]]
             )
 
-        self._engine = Engine(
+        self._engine = RsEngine(
             list(signal_to_engine_id.values()), ops, list(self.probe_mapping.values())
         )
         self.data = SimData(self)
