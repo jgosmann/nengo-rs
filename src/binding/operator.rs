@@ -1,4 +1,4 @@
-use crate::binding::signal::RsSignal;
+use crate::binding::signal::PySignal;
 use crate::binding::Wrapper;
 use crate::operator::{CopyOp, ElementwiseInc, OperatorNode, Reset, TimeUpdate};
 use crate::signal::ArraySignal;
@@ -8,33 +8,33 @@ use pyo3::prelude::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-#[pyclass]
-pub struct RsOperator {
+#[pyclass(name=Operator)]
+pub struct PyOperator {
     node: Arc<OperatorNode>,
 }
 
-impl Wrapper<Arc<OperatorNode>> for RsOperator {
+impl Wrapper<Arc<OperatorNode>> for PyOperator {
     fn get(&self) -> &Arc<OperatorNode> {
         &self.node
     }
 }
 
-#[pyclass(extends=RsOperator)]
-pub struct RsReset {}
+#[pyclass(extends=PyOperator, name=Reset)]
+pub struct PyReset {}
 
 #[pymethods]
-impl RsReset {
+impl PyReset {
     #[new]
     fn new(
         value: &PyAny,
-        target: &RsSignal,
+        target: &PySignal,
         dependencies: Vec<usize>,
-    ) -> PyResult<(Self, RsOperator)> {
+    ) -> PyResult<(Self, PyOperator)> {
         let value: &PyArrayDyn<f64> = value.extract()?;
         let value = value.to_owned_array();
         Ok((
             Self {},
-            RsOperator {
+            PyOperator {
                 node: Arc::new(OperatorNode {
                     operator: Box::new(Reset::<ArrayD<f64>, ArraySignal<f64>> {
                         value,
@@ -47,21 +47,21 @@ impl RsReset {
     }
 }
 
-#[pyclass(extends=RsOperator)]
-pub struct RsTimeUpdate {}
+#[pyclass(extends=PyOperator, name=TimeUpdate)]
+pub struct PyTimeUpdate {}
 
 #[pymethods]
-impl RsTimeUpdate {
+impl PyTimeUpdate {
     #[new]
     fn new(
         dt: f64,
-        step_target: &RsSignal,
-        time_target: &RsSignal,
+        step_target: &PySignal,
+        time_target: &PySignal,
         dependencies: Vec<usize>,
-    ) -> PyResult<(Self, RsOperator)> {
+    ) -> PyResult<(Self, PyOperator)> {
         Ok((
             Self {},
-            RsOperator {
+            PyOperator {
                 node: Arc::new(OperatorNode {
                     operator: Box::new(TimeUpdate::<f64, u64> {
                         dt,
@@ -75,21 +75,21 @@ impl RsTimeUpdate {
     }
 }
 
-#[pyclass(extends=RsOperator)]
-pub struct RsElementwiseInc {}
+#[pyclass(extends=PyOperator, name=ElementwiseInc)]
+pub struct PyElementwiseInc {}
 
 #[pymethods]
-impl RsElementwiseInc {
+impl PyElementwiseInc {
     #[new]
     fn new(
-        target: &RsSignal,
-        left: &RsSignal,
-        right: &RsSignal,
+        target: &PySignal,
+        left: &PySignal,
+        right: &PySignal,
         dependencies: Vec<usize>,
-    ) -> PyResult<(Self, RsOperator)> {
+    ) -> PyResult<(Self, PyOperator)> {
         Ok((
             Self {},
-            RsOperator {
+            PyOperator {
                 node: Arc::new(OperatorNode {
                     operator: Box::new(ElementwiseInc::<f64> {
                         target: target.extract_signal("target")?,
@@ -103,20 +103,20 @@ impl RsElementwiseInc {
     }
 }
 
-#[pyclass(extends=RsOperator)]
-pub struct RsCopy {}
+#[pyclass(extends=PyOperator, name=Copy)]
+pub struct PyCopy {}
 
 #[pymethods]
-impl RsCopy {
+impl PyCopy {
     #[new]
     fn new(
-        src: &RsSignal,
-        dst: &RsSignal,
+        src: &PySignal,
+        dst: &PySignal,
         dependencies: Vec<usize>,
-    ) -> PyResult<(Self, RsOperator)> {
+    ) -> PyResult<(Self, PyOperator)> {
         Ok((
             Self {},
-            RsOperator {
+            PyOperator {
                 node: Arc::new(OperatorNode {
                     operator: Box::new(CopyOp::<ArrayD<f64>, ArraySignal<f64>> {
                         src: src.extract_signal("src")?,

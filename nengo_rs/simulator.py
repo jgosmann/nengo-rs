@@ -1,20 +1,20 @@
 from nengo.builder import Model
-from nengo.builder.operator import Copy, ElementwiseInc, Reset, TimeUpdate
+from nengo.builder import operator as core_op
 from nengo.cache import get_default_decoder_cache
 from nengo.utils.graphs import BidirectionalDAG, toposort
 from nengo.utils.simulator import operator_dependency_graph
 import numpy as np
 
 from .engine import (
-    RsEngine,
-    RsSignalArrayF64,
-    RsSignalF64,
-    RsSignalU64,
-    RsReset,
-    RsTimeUpdate,
-    RsElementwiseInc,
-    RsCopy,
-    RsProbe,
+    Engine,
+    SignalArrayF64,
+    SignalF64,
+    SignalU64,
+    Reset,
+    TimeUpdate,
+    ElementwiseInc,
+    Copy,
+    Probe,
 )
 
 
@@ -31,10 +31,10 @@ class Simulator:
         for signal_dict in self.model.sig.values():
             for signal in signal_dict.values():
                 if signal is not None:
-                    signal_to_engine_id[signal] = RsSignalArrayF64(signal)
-        x = RsSignalU64("step", 0)
+                    signal_to_engine_id[signal] = SignalArrayF64(signal)
+        x = SignalU64("step", 0)
         signal_to_engine_id[self.model.step] = x
-        signal_to_engine_id[self.model.time] = RsSignalF64("time", 0.0)
+        signal_to_engine_id[self.model.time] = SignalF64("time", 0.0)
         self._sig_to_ngine_id = signal_to_engine_id
 
         dg = BidirectionalDAG(operator_dependency_graph(self.model.operators))
@@ -44,36 +44,36 @@ class Simulator:
         ops = []
         for op in toposorted_dg:
             dependencies = [node_indices[node] for node in dg.backward[op]]
-            if isinstance(op, Reset):
+            if isinstance(op, core_op.Reset):
                 ops.append(
-                    RsReset(
+                    Reset(
                         np.asarray(op.value, dtype=np.float64),
                         signal_to_engine_id[op.dst],
                         dependencies,
                     )
                 )
-            elif isinstance(op, TimeUpdate):
+            elif isinstance(op, core_op.TimeUpdate):
                 ops.append(
-                    RsTimeUpdate(
+                    TimeUpdate(
                         dt,
                         signal_to_engine_id[self.model.step],
                         signal_to_engine_id[self.model.time],
                         dependencies,
                     )
                 )
-            elif isinstance(op, ElementwiseInc):
+            elif isinstance(op, core_op.ElementwiseInc):
                 ops.append(
-                    RsElementwiseInc(
+                    ElementwiseInc(
                         signal_to_engine_id[op.Y],
                         signal_to_engine_id[op.A],
                         signal_to_engine_id[op.X],
                         dependencies,
                     )
                 )
-            elif isinstance(op, Copy):
+            elif isinstance(op, core_op.Copy):
                 assert op.src_slice is None and op.dst_slice is None
                 ops.append(
-                    RsCopy(
+                    Copy(
                         signal_to_engine_id[op.src],
                         signal_to_engine_id[op.dst],
                         dependencies,
@@ -84,11 +84,11 @@ class Simulator:
 
         self.probe_mapping = {}
         for probe in self.model.probes:
-            self.probe_mapping[probe] = RsProbe(
+            self.probe_mapping[probe] = Probe(
                 signal_to_engine_id[self.model.sig[probe]["in"]]
             )
 
-        self._engine = RsEngine(
+        self._engine = Engine(
             list(signal_to_engine_id.values()), ops, list(self.probe_mapping.values())
         )
         self.data = SimData(self)

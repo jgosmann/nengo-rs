@@ -1,4 +1,4 @@
-use crate::binding::signal::RsSignal;
+use crate::binding::signal::PySignal;
 use crate::binding::Wrapper;
 use crate::probe::{Probe, SignalProbe};
 use crate::signal::ArraySignal;
@@ -9,21 +9,21 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-#[pyclass]
-pub struct RsProbe {
+#[pyclass(name=Probe)]
+pub struct PyProbe {
     probe: Arc<RwLock<dyn Probe + Send + Sync>>,
 }
 
-impl Wrapper<Arc<RwLock<dyn Probe + Send + Sync>>> for RsProbe {
+impl Wrapper<Arc<RwLock<dyn Probe + Send + Sync>>> for PyProbe {
     fn get(&self) -> &Arc<RwLock<dyn Probe + Send + Sync>> {
         &self.probe
     }
 }
 
 #[pymethods]
-impl RsProbe {
+impl PyProbe {
     #[new]
-    fn new(target: &RsSignal) -> PyResult<Self> {
+    fn new(target: &PySignal) -> PyResult<Self> {
         Ok(Self {
             probe: Arc::new(RwLock::new(
                 SignalProbe::<ArrayD<f64>, ArraySignal<f64>>::new(

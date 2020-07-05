@@ -6,18 +6,18 @@ use pyo3::prelude::*;
 use std::any::type_name;
 use std::sync::Arc;
 
-#[pyclass]
-pub struct RsSignal {
+#[pyclass(name=Signal)]
+pub struct PySignal {
     signal: Arc<dyn Signal + Send + Sync>,
 }
 
-impl Wrapper<Arc<dyn Signal + Send + Sync>> for RsSignal {
+impl Wrapper<Arc<dyn Signal + Send + Sync>> for PySignal {
     fn get(&self) -> &Arc<dyn Signal + Send + Sync> {
         &self.signal
     }
 }
 
-impl RsSignal {
+impl PySignal {
     pub fn extract_signal<T: Signal + Send + Sync + 'static>(
         &self,
         name: &str,
@@ -33,31 +33,31 @@ impl RsSignal {
     }
 }
 
-#[pyclass(extends=RsSignal)]
-pub struct RsSignalArrayF64 {}
+#[pyclass(extends=PySignal, name=SignalArrayF64)]
+pub struct PySignalArrayF64 {}
 
 #[pymethods]
-impl RsSignalArrayF64 {
+impl PySignalArrayF64 {
     #[new]
-    fn new(signal: &PyAny) -> PyResult<(Self, RsSignal)> {
+    fn new(signal: &PyAny) -> PyResult<(Self, PySignal)> {
         let name = signal.getattr("name")?.extract()?;
         let initial_value = signal.getattr("initial_value")?;
         let initial_value: &PyArrayDyn<f64> = initial_value.extract()?;
         let signal = Arc::new(ArraySignal::new(name, initial_value));
-        Ok((Self {}, RsSignal { signal }))
+        Ok((Self {}, PySignal { signal }))
     }
 }
 
-#[pyclass(extends=RsSignal)]
-pub struct RsSignalU64 {}
+#[pyclass(extends=PySignal, name=SignalU64)]
+pub struct PySignalU64 {}
 
 #[pymethods]
-impl RsSignalU64 {
+impl PySignalU64 {
     #[new]
-    fn new(name: String, initial_value: u64) -> PyResult<(Self, RsSignal)> {
+    fn new(name: String, initial_value: u64) -> PyResult<(Self, PySignal)> {
         Ok((
             Self {},
-            RsSignal {
+            PySignal {
                 signal: Arc::new(ScalarSignal::new(name, initial_value)),
             },
         ))
@@ -74,16 +74,16 @@ impl RsSignalU64 {
     }
 }
 
-#[pyclass(extends=RsSignal)]
-pub struct RsSignalF64 {}
+#[pyclass(extends=PySignal, name=SignalF64)]
+pub struct PySignalF64 {}
 
 #[pymethods]
-impl RsSignalF64 {
+impl PySignalF64 {
     #[new]
-    fn new(name: String, initial_value: f64) -> PyResult<(Self, RsSignal)> {
+    fn new(name: String, initial_value: f64) -> PyResult<(Self, PySignal)> {
         Ok((
             Self {},
-            RsSignal {
+            PySignal {
                 signal: Arc::new(ScalarSignal::new(name, initial_value)),
             },
         ))

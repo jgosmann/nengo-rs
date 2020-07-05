@@ -1,19 +1,19 @@
-use crate::binding::operator::RsOperator;
-use crate::binding::probe::RsProbe;
-use crate::binding::signal::RsSignal;
+use crate::binding::operator::PyOperator;
+use crate::binding::probe::PyProbe;
+use crate::binding::signal::PySignal;
 use crate::binding::Wrapper;
 use crate::engine::Engine;
 use pyo3::prelude::*;
 use pyo3::PyClass;
 use std::sync::Arc;
 
-#[pyclass]
-pub struct RsEngine {
+#[pyclass(name = Engine)]
+pub struct PyEngine {
     engine: Engine,
 }
 
 #[pymethods]
-impl RsEngine {
+impl PyEngine {
     #[new]
     fn new(signals: &PyAny, operators: &PyAny, probes: &PyAny) -> PyResult<Self> {
         fn py_cells_to_pure_rust<T: PyClass + Wrapper<Arc<U>>, U: ?Sized>(
@@ -24,9 +24,9 @@ impl RsEngine {
 
         Ok(Self {
             engine: Engine::new(
-                py_cells_to_pure_rust::<RsSignal, _>(&signals.extract()?),
-                py_cells_to_pure_rust::<RsOperator, _>(&operators.extract()?),
-                py_cells_to_pure_rust::<RsProbe, _>(&probes.extract()?),
+                py_cells_to_pure_rust::<PySignal, _>(&signals.extract()?),
+                py_cells_to_pure_rust::<PyOperator, _>(&operators.extract()?),
+                py_cells_to_pure_rust::<PyProbe, _>(&probes.extract()?),
             ),
         })
     }
