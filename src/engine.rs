@@ -7,6 +7,7 @@ use futures::future::Future;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use ndarray::ArrayD;
+use ndarray::Axis;
 use numpy::PyArrayDyn;
 use pyo3::exceptions as exc;
 use pyo3::prelude::*;
@@ -260,13 +261,20 @@ impl RsProbe {
     }
 
     fn get_data(&self) -> PyResult<PyObject> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        (self.probe.read().unwrap())
+        let probe = self.probe.read().unwrap();
+        let probe = probe
             .as_any()
             .downcast_ref::<SignalProbe<ArrayD<f64>, ArraySignal<f64>>>()
-            .unwrap()
-            .get_data(py)
+            .unwrap();
+        let data = probe.get_data();
+
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let copy = PyArrayDyn::new(py, [&[data.len()], probe.shape()].concat(), false);
+        for (i, x) in data.iter().enumerate() {
+            copy.as_array_mut().index_axis_mut(Axis(0), i).assign(x);
+        }
+        Ok(copy.to_object(py))
     }
 }
 
