@@ -8,7 +8,7 @@ use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
 
-type AnySignal = dyn Any + Send + Sync;
+pub type AnySignal = dyn Any + Send + Sync;
 
 pub trait Signal: Debug {
     fn as_any(&self) -> &dyn Any;
