@@ -99,3 +99,134 @@ impl PySignalF64 {
             .read()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::prelude::*;
+    use pyo3::{types::IntoPyDict, wrap_pymodule, ToPyObject};
+
+    #[pymodule]
+    fn signal(_py: Python, m: &PyModule) -> PyResult<()> {
+        m.add_class::<PySignalArrayF64>()?;
+        m.add_class::<PySignalF64>()?;
+        m.add_class::<PySignalU64>()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_py_signal_array_f64() {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let nengo = PyModule::import(py, "nengo").unwrap();
+        let numpy = PyModule::import(py, "numpy").unwrap();
+        let signal_module = wrap_pymodule!(signal)(py);
+        let globals = [
+            ("nengo", nengo.to_object(py)),
+            ("np", numpy.to_object(py)),
+            ("s", signal_module),
+        ]
+        .into_py_dict(py);
+
+        let py_signal = py
+            .eval(
+                "s.SignalArrayF64(nengo.builder.signal.Signal(np.array([1., 2.]), name='TestSignal'))",
+                Some(globals),
+                None,
+            )
+            .unwrap();
+
+        let py_signal: &PyCell<PySignal> = py_signal.extract().unwrap();
+
+        let signal = py_signal.borrow();
+        assert_eq!(signal.get().name(), "TestSignal");
+        assert_eq!(signal.get().shape(), &[2]);
+
+        let signal: Arc<ArraySignal<f64>> = py_signal.borrow().extract_signal("test").unwrap();
+        signal.reset();
+        assert_eq!(
+            *signal.read(),
+            array![1., 2.].into_dimensionality::<IxDyn>().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_py_signal_array_f64_from_scalar() {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let nengo = PyModule::import(py, "nengo").unwrap();
+        let numpy = PyModule::import(py, "numpy").unwrap();
+        let signal_module = wrap_pymodule!(signal)(py);
+        let globals = [
+            ("nengo", nengo.to_object(py)),
+            ("np", numpy.to_object(py)),
+            ("s", signal_module),
+        ]
+        .into_py_dict(py);
+
+        let py_signal = py
+            .eval(
+                "s.SignalArrayF64(nengo.builder.signal.Signal(np.float64(42.), name='TestSignal'))",
+                Some(globals),
+                None,
+            )
+            .unwrap();
+
+        let py_signal: &PyCell<PySignal> = py_signal.extract().unwrap();
+
+        let signal = py_signal.borrow();
+        assert_eq!(signal.get().name(), "TestSignal");
+        assert_eq!(signal.get().shape(), &[]);
+
+        let signal: Arc<ArraySignal<f64>> = py_signal.borrow().extract_signal("test").unwrap();
+        signal.reset();
+        assert_eq!(
+            *signal.read(),
+            array![42.].into_dimensionality::<IxDyn>().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_py_signal_u64() {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let signal_module = wrap_pymodule!(signal)(py);
+        let globals = [("s", signal_module)].into_py_dict(py);
+
+        let py_signal = py
+            .eval("s.SignalU64('TestSignal', 2)", Some(globals), None)
+            .unwrap();
+
+        let py_signal: &PyCell<PySignal> = py_signal.extract().unwrap();
+
+        let signal = py_signal.borrow();
+        assert_eq!(signal.get().name(), "TestSignal");
+        assert_eq!(signal.get().shape(), &[]);
+
+        let signal: Arc<ScalarSignal<u64>> = py_signal.borrow().extract_signal("test").unwrap();
+        signal.reset();
+        assert_eq!(*signal.read(), 2);
+    }
+
+    #[test]
+    fn test_py_signal_f64() {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let signal_module = wrap_pymodule!(signal)(py);
+        let globals = [("s", signal_module)].into_py_dict(py);
+
+        let py_signal = py
+            .eval("s.SignalF64('TestSignal', 2.)", Some(globals), None)
+            .unwrap();
+
+        let py_signal: &PyCell<PySignal> = py_signal.extract().unwrap();
+
+        let signal = py_signal.borrow();
+        assert_eq!(signal.get().name(), "TestSignal");
+        assert_eq!(signal.get().shape(), &[]);
+
+        let signal: Arc<ScalarSignal<f64>> = py_signal.borrow().extract_signal("test").unwrap();
+        signal.reset();
+        assert_eq!(*signal.read(), 2.);
+    }
+}
