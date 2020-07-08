@@ -50,3 +50,74 @@ impl PyProbe {
         Ok(copy.to_object(py))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::binding::signal::PySignalArrayF64;
+    use crate::signal::{ArraySignal, Signal, SignalAccess};
+    use ndarray::prelude::*;
+    use pyo3::{types::IntoPyDict, wrap_pymodule, ToPyObject};
+
+    #[pymodule]
+    fn probe(_py: Python, m: &PyModule) -> PyResult<()> {
+        m.add_class::<PyProbe>()?;
+        m.add_class::<PySignalArrayF64>()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_probe_binding() {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let nengo = PyModule::import(py, "nengo").unwrap();
+        let numpy = PyModule::import(py, "numpy").unwrap();
+        let probe_module = wrap_pymodule!(probe)(py);
+        let globals = [
+            ("nengo", nengo.to_object(py)),
+            ("np", numpy.to_object(py)),
+            ("p", probe_module),
+        ]
+        .into_py_dict(py);
+
+        let py_signal = py
+            .eval(
+                "p.SignalArrayF64(nengo.builder.signal.Signal(np.array([1., 2.]), name='TestSignal'))",
+                Some(globals),
+                None,
+            )
+            .unwrap();
+        let py_signal: &PyCell<PySignal> = py_signal.extract().unwrap();
+        let py_probe = py
+            .eval(
+                "p.Probe(signal)",
+                Some(globals),
+                Some([("signal", py_signal)].into_py_dict(py)),
+            )
+            .unwrap();
+        let py_probe: &PyCell<PyProbe> = py_probe.extract().unwrap();
+
+        let signal: Arc<ArraySignal<f64>> = py_signal.borrow().extract_signal("test").unwrap();
+        let probe: Arc<RwLock<dyn Probe + Send + Sync>> = Arc::clone(&py_probe.borrow().get());
+
+        signal.reset();
+        probe.write().unwrap().probe();
+        signal.write().assign(&array![42., 42.]);
+        probe.write().unwrap().probe();
+
+        let data = py
+            .eval(
+                "probe.get_data()",
+                Some(globals),
+                Some([("probe", py_probe)].into_py_dict(py)),
+            )
+            .unwrap();
+        let data: &PyArrayDyn<f64> = data.extract().unwrap();
+        assert_eq!(
+            data.as_array(),
+            array![[1., 2.], [42., 42.]]
+                .into_dimensionality::<IxDyn>()
+                .unwrap()
+        );
+    }
+}

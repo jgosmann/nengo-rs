@@ -7,6 +7,7 @@ use std::any::type_name;
 use std::sync::Arc;
 
 #[pyclass(name=Signal)]
+#[derive(Debug)]
 pub struct PySignal {
     signal: Arc<dyn Signal + Send + Sync>,
 }
