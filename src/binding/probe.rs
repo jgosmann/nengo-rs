@@ -56,6 +56,7 @@ mod tests {
     use super::*;
     use crate::binding::signal::PySignalArrayF64;
     use crate::signal::{ArraySignal, Signal, SignalAccess};
+    use crate::venv::activate_venv;
     use ndarray::prelude::*;
     use pyo3::{types::IntoPyDict, wrap_pymodule, ToPyObject};
 
@@ -70,6 +71,7 @@ mod tests {
     fn test_probe_binding() {
         let gil = Python::acquire_gil();
         let py = gil.python();
+        activate_venv(py);
         let nengo = PyModule::import(py, "nengo").unwrap();
         let numpy = PyModule::import(py, "numpy").unwrap();
         let probe_module = wrap_pymodule!(probe)(py);

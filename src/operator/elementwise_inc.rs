@@ -29,6 +29,7 @@ where
 mod test {
     use super::*;
     use crate::signal::Signal;
+    use crate::venv::activate_venv;
     use ndarray::prelude::*;
     use numpy::IntoPyArray;
     use pyo3::Python;
@@ -38,6 +39,7 @@ mod test {
     fn it_performs_an_elementwise_increment() -> Result<(), Box<dyn Error>> {
         let gil = Python::acquire_gil();
         let py = gil.python();
+        activate_venv(py);
         let op = ElementwiseInc::<u64> {
             target: Arc::new(ArraySignal::new(
                 "target".to_string(),

@@ -104,6 +104,7 @@ impl PySignalF64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::venv::activate_venv;
     use ndarray::prelude::*;
     use ndarray::Ix;
     use pyo3::{types::IntoPyDict, wrap_pymodule, ToPyObject};
@@ -124,6 +125,7 @@ mod tests {
     {
         let gil = Python::acquire_gil();
         let py = gil.python();
+        activate_venv(py);
         let nengo = PyModule::import(py, "nengo").unwrap();
         let numpy = PyModule::import(py, "numpy").unwrap();
         let signal_module = wrap_pymodule!(signal)(py);

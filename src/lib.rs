@@ -27,3 +27,6 @@ fn engine(_py: Python, m: &PyModule) -> PyResult<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+pub mod venv;

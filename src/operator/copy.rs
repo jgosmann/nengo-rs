@@ -27,6 +27,7 @@ impl<T: Copy> Operator for CopyOp<T, ScalarSignal<T>> {
 mod tests {
     use super::*;
     use crate::signal::Signal;
+    use crate::venv::activate_venv;
     use ndarray::prelude::*;
     use numpy::IntoPyArray;
     use pyo3::Python;
@@ -50,6 +51,7 @@ mod tests {
     fn it_copies_array_signals() {
         let gil = Python::acquire_gil();
         let py = gil.python();
+        activate_venv(py);
         let op = CopyOp::<ArrayD<u64>, ArraySignal<u64>> {
             src: Arc::new(ArraySignal::new(
                 "src".to_string(),
