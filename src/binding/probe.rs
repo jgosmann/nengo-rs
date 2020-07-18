@@ -73,7 +73,7 @@ mod tests {
         let nengo = PyModule::import(py, "nengo").unwrap();
         let numpy = PyModule::import(py, "numpy").unwrap();
         let probe_module = wrap_pymodule!(probe)(py);
-        let globals = [
+        let locals = [
             ("nengo", nengo.to_object(py)),
             ("np", numpy.to_object(py)),
             ("p", probe_module),
@@ -83,15 +83,15 @@ mod tests {
         let py_signal = py
             .eval(
                 "p.SignalArrayF64(nengo.builder.signal.Signal(np.array([1., 2.]), name='TestSignal'))",
-                Some(globals),
                 None,
+                Some(locals),
             )
             .unwrap();
         let py_signal: &PyCell<PySignal> = py_signal.extract().unwrap();
         let py_probe = py
             .eval(
                 "p.Probe(signal)",
-                Some(globals),
+                Some(locals),
                 Some([("signal", py_signal)].into_py_dict(py)),
             )
             .unwrap();
@@ -108,7 +108,7 @@ mod tests {
         let data = py
             .eval(
                 "probe.get_data()",
-                Some(globals),
+                Some(locals),
                 Some([("probe", py_probe)].into_py_dict(py)),
             )
             .unwrap();

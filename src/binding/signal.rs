@@ -127,14 +127,14 @@ mod tests {
         let nengo = PyModule::import(py, "nengo").unwrap();
         let numpy = PyModule::import(py, "numpy").unwrap();
         let signal_module = wrap_pymodule!(signal)(py);
-        let globals = [
+        let locals = [
             ("nengo", nengo.to_object(py)),
             ("np", numpy.to_object(py)),
             ("s", signal_module),
         ]
         .into_py_dict(py);
 
-        let py_signal = py.eval(expr, Some(globals), None).unwrap();
+        let py_signal = py.eval(expr, None, Some(locals)).unwrap();
 
         let py_signal: &PyCell<PySignal> = py_signal.extract().unwrap();
 
