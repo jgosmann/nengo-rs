@@ -3,10 +3,9 @@ use numpy::{PyArrayDyn, TypeNum};
 use pyo3::prelude::*;
 use std::any::Any;
 use std::fmt::Debug;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::sync::RwLockReadGuard;
-use std::sync::RwLockWriteGuard;
 
 pub type AnySignal = dyn Any + Send + Sync;
 
@@ -19,8 +18,8 @@ pub trait Signal: Debug {
 }
 
 pub trait SignalAccess<T> {
-    fn read(&self) -> RwLockReadGuard<T>;
-    fn write(&self) -> RwLockWriteGuard<T>;
+    fn read<'a>(&'a self) -> Box<dyn Deref<Target = T> + 'a>;
+    fn write<'a>(&'a self) -> Box<dyn DerefMut<Target = T> + 'a>;
 }
 
 #[derive(Debug)]
@@ -63,12 +62,12 @@ impl<T: Copy + Send + Sync + Debug + 'static> Signal for ScalarSignal<T> {
 }
 
 impl<T> SignalAccess<T> for ScalarSignal<T> {
-    fn read(&self) -> RwLockReadGuard<T> {
-        self.value.read().unwrap()
+    fn read<'a>(&'a self) -> Box<dyn Deref<Target = T> + 'a> {
+        Box::new(self.value.read().unwrap())
     }
 
-    fn write(&self) -> RwLockWriteGuard<T> {
-        self.value.write().unwrap()
+    fn write<'a>(&'a self) -> Box<dyn DerefMut<Target = T> + 'a> {
+        Box::new(self.value.write().unwrap())
     }
 }
 
@@ -124,11 +123,11 @@ impl<T: TypeNum + Send + Sync + 'static> Signal for ArraySignal<T> {
 }
 
 impl<T: TypeNum> SignalAccess<ArrayD<T>> for ArraySignal<T> {
-    fn read(&self) -> RwLockReadGuard<ArrayD<T>> {
-        self.buffer.read().unwrap()
+    fn read<'a>(&'a self) -> Box<dyn Deref<Target = ArrayD<T>> + 'a> {
+        Box::new(self.buffer.read().unwrap())
     }
 
-    fn write(&self) -> RwLockWriteGuard<ArrayD<T>> {
-        self.buffer.write().unwrap()
+    fn write<'a>(&'a self) -> Box<dyn DerefMut<Target = ArrayD<T>> + 'a> {
+        Box::new(self.buffer.write().unwrap())
     }
 }

@@ -18,10 +18,10 @@ where
     T: TypeNum + Mul<T, Output = T> + AddAssign<T>,
 {
     fn step(&self) {
-        let left = &(*self.left.read());
-        let right = &(*self.right.read());
+        let left = &(**self.left.read());
+        let right = &(**self.right.read());
         let mut target = self.target.write();
-        *target += &(left * right);
+        **target += &(left * right);
     }
 }
 
@@ -65,7 +65,7 @@ mod test {
         op.step();
 
         assert_eq!(
-            *op.target.read(),
+            **op.target.read(),
             array![9, 16].into_dimensionality::<IxDyn>()?
         );
         Ok(())

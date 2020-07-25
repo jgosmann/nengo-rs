@@ -49,7 +49,7 @@ impl<T: TypeNum + Send + Sync + 'static> Probe for SignalProbe<T, ScalarSignal<T
     }
 
     fn probe(&mut self) {
-        self.data.push(*self.signal.read());
+        self.data.push(**self.signal.read());
     }
 }
 
@@ -74,9 +74,9 @@ mod tests {
         let mut probe = SignalProbe::<u64, _>::new(&Arc::clone(&probed_signal));
 
         probe.probe();
-        *probed_signal.write() = 1;
+        **probed_signal.write() = 1;
         probe.probe();
-        *probed_signal.write() = 42;
+        **probed_signal.write() = 42;
         probe.probe();
 
         assert_eq!(probe.get_data(), &vec![0, 1, 42]);

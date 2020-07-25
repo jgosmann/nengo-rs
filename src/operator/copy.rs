@@ -19,7 +19,7 @@ impl<T: TypeNum> Operator for CopyOp<ArrayD<T>, ArraySignal<T>> {
 
 impl<T: Copy> Operator for CopyOp<T, ScalarSignal<T>> {
     fn step(&self) {
-        *self.dst.write() = *self.src.read();
+        **self.dst.write() = **self.src.read();
     }
 }
 
@@ -44,7 +44,7 @@ mod tests {
 
         op.step();
 
-        assert_eq!(*op.src.read(), *op.dst.read());
+        assert_eq!(**op.src.read(), **op.dst.read());
     }
 
     #[test]
@@ -68,6 +68,6 @@ mod tests {
 
         op.step();
 
-        assert_eq!(*op.src.read(), *op.dst.read());
+        assert_eq!(**op.src.read(), **op.dst.read());
     }
 }

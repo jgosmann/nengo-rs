@@ -21,7 +21,7 @@ impl<T: TypeNum + Send + Sync + 'static> Operator for Reset<ArrayD<T>, ArraySign
 
 impl<T: Send + Sync + Copy + Debug + 'static> Operator for Reset<T, ScalarSignal<T>> {
     fn step(&self) {
-        *self.target.write() = self.value;
+        **self.target.write() = self.value;
     }
 }
 
@@ -44,7 +44,7 @@ mod test {
 
         op.step();
 
-        assert_eq!(*op.target.read(), 42);
+        assert_eq!(**op.target.read(), 42);
     }
 
     #[test]
@@ -63,7 +63,7 @@ mod test {
         op.step();
 
         assert_eq!(
-            *op.target.read(),
+            **op.target.read(),
             array![1, 2].into_dimensionality::<IxDyn>()?
         );
         Ok(())

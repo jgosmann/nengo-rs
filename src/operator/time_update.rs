@@ -10,8 +10,8 @@ pub struct TimeUpdate<T, S> {
 
 impl Operator for TimeUpdate<f64, u64> {
     fn step(&self) {
-        *self.step_target.write() += 1;
-        *self.time_target.write() = *self.step_target.read() as f64 * self.dt;
+        **self.step_target.write() += 1;
+        **self.time_target.write() = **self.step_target.read() as f64 * self.dt;
     }
 }
 
@@ -34,7 +34,7 @@ mod tests {
             op.step();
         }
 
-        assert_eq!(*op.step_target.read(), 3);
+        assert_eq!(**op.step_target.read(), 3);
     }
 
     #[test]
@@ -51,6 +51,6 @@ mod tests {
             op.step();
         }
 
-        assert_eq!(*op.time_target.read(), 3. * op.dt);
+        assert_eq!(**op.time_target.read(), 3. * op.dt);
     }
 }

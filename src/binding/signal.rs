@@ -65,7 +65,7 @@ impl PySignalU64 {
     }
 
     fn get(py_self: PyRef<Self>) -> u64 {
-        *py_self
+        **py_self
             .as_ref()
             .signal
             .as_any()
@@ -91,7 +91,7 @@ impl PySignalF64 {
     }
 
     fn get(py_self: PyRef<Self>) -> f64 {
-        *py_self
+        **py_self
             .as_ref()
             .signal
             .as_any()
@@ -146,7 +146,7 @@ mod tests {
 
         let signal: Arc<S> = py_signal.borrow().extract_signal("test").unwrap();
         signal.reset();
-        assert_eq!(*signal.read(), expected_value);
+        assert_eq!(**signal.read(), expected_value);
     }
 
     #[test]
