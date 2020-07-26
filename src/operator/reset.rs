@@ -15,7 +15,7 @@ where
 
 impl<T: TypeNum + Send + Sync + 'static> Operator for Reset<ArrayD<T>, ArraySignal<T>> {
     fn step(&self) {
-        self.target.write().assign(&self.value);
+        self.target.write().assign_array(&self.value);
     }
 }
 

@@ -104,7 +104,7 @@ mod tests {
 
         signal.reset();
         probe.write().unwrap().probe();
-        signal.write().assign(&array![42., 42.]);
+        signal.write().assign_array(&array![42., 42.]);
         probe.write().unwrap().probe();
 
         let data = py

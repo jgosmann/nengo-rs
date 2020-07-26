@@ -29,7 +29,7 @@ impl<T: TypeNum + Send + Sync + 'static> Probe for SignalProbe<ArrayD<T>, ArrayS
     }
 
     fn probe(&mut self) {
-        self.data.push(self.signal.read().clone())
+        self.data.push(self.signal.read().clone_array())
     }
 }
 
@@ -97,9 +97,9 @@ mod tests {
         let mut probe = SignalProbe::<ArrayD<u64>, _>::new(&Arc::clone(&probed_signal));
 
         probe.probe();
-        probed_signal.write().assign(&array![1, 1]);
+        probed_signal.write().assign_array(&array![1, 1]);
         probe.probe();
-        probed_signal.write().assign(&array![42, 43]);
+        probed_signal.write().assign_array(&array![42, 43]);
         probe.probe();
 
         assert_eq!(

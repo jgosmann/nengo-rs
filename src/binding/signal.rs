@@ -1,5 +1,5 @@
 use crate::binding::Wrapper;
-use crate::signal::{ArraySignal, ScalarSignal, Signal, SignalAccess};
+use crate::signal::{ArrayRef, ArraySignal, ScalarSignal, Signal, SignalAccess};
 use numpy::PyArrayDyn;
 use pyo3::exceptions as exc;
 use pyo3::prelude::*;
@@ -155,7 +155,7 @@ mod tests {
             "s.SignalArrayF64(nengo.builder.signal.Signal(np.array([1., 2.]), name='TestSignal'))",
             "TestSignal",
             &[2],
-            array![1., 2.].into_dimensionality::<IxDyn>().unwrap(),
+            ArrayRef::Owned(array![1., 2.].into_dimensionality::<IxDyn>().unwrap()),
         );
     }
 
@@ -165,7 +165,7 @@ mod tests {
             "s.SignalArrayF64(nengo.builder.signal.Signal(np.float64(42.), name='TestSignal'))",
             "TestSignal",
             &[],
-            array![42.].into_dimensionality::<IxDyn>().unwrap(),
+            ArrayRef::Owned(array![42.].into_dimensionality::<IxDyn>().unwrap()),
         );
     }
 
