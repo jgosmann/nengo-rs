@@ -1,6 +1,5 @@
 use ndarray::{
     Array, ArrayBase, ArrayD, Data, Dimension, Ix, IxDyn, RawData, SliceInfo, SliceOrIndex,
-    StrideShape,
 };
 use numpy::{PyArrayDyn, TypeNum};
 use pyo3::prelude::*;
@@ -74,10 +73,27 @@ impl<T> SignalAccess<T> for ScalarSignal<T> {
     }
 }
 
-#[derive(Debug)]
 pub enum ArrayRef<T: TypeNum> {
     Owned(ArrayD<T>),
-    View(Arc<ArraySignal<T>>, Box<SliceInfo<[SliceOrIndex], IxDyn>>),
+    View(
+        Arc<ArraySignal<T>>,
+        Box<SliceInfo<Vec<SliceOrIndex>, IxDyn>>,
+    ),
+}
+
+impl<T: TypeNum + Debug> Debug for ArrayRef<T> {
+    fn fmt(
+        &self,
+        formatter: &mut std::fmt::Formatter<'_>,
+    ) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            ArrayRef::Owned(array) => array.fmt(formatter),
+            ArrayRef::View(base, slice) => match &*base.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => base.slice(slice.as_ref().as_ref()).fmt(formatter),
+                ArrayRef::View(_, _) => formatter.write_str("transitive ArrayRef::View"),
+            },
+        }
+    }
 }
 
 impl<T: TypeNum> ArrayRef<T> {
@@ -86,7 +102,7 @@ impl<T: TypeNum> ArrayRef<T> {
             ArrayRef::Owned(src) => self.assign_array(&src),
             ArrayRef::View(src, slice) => {
                 if let ArrayRef::Owned(base) = &*src.buffer.read().unwrap() {
-                    self.assign_array(&base.slice(&*slice));
+                    self.assign_array(&base.slice(slice.as_ref().as_ref()));
                 }
                 // FIXME error?
             }
@@ -101,7 +117,7 @@ impl<T: TypeNum> ArrayRef<T> {
             ArrayRef::Owned(dst) => dst.assign(src),
             ArrayRef::View(dst, slice) => {
                 if let ArrayRef::Owned(base) = &mut *dst.buffer.write().unwrap() {
-                    base.slice_mut(&*slice).assign(src);
+                    base.slice_mut(slice.as_ref().as_ref()).assign(src);
                 }
                 // FIXME error?
             }
@@ -115,7 +131,7 @@ impl<T: TypeNum> ArrayRef<T> {
             ArrayRef::Owned(src) => src.clone(),
             ArrayRef::View(src, slice) => {
                 if let ArrayRef::Owned(base) = &*src.buffer.read().unwrap() {
-                    base.slice(&*slice).to_owned()
+                    base.slice(slice.as_ref().as_ref()).to_owned()
                 } else {
                     panic!("Base must be owned."); // FIXME error?
                 }
@@ -134,7 +150,7 @@ where
             ArrayRef::Owned(lhs) => *lhs += rhs,
             ArrayRef::View(lhs, slice) => {
                 if let ArrayRef::Owned(base) = &mut *lhs.buffer.write().unwrap() {
-                    let mut view = base.slice_mut(&*slice);
+                    let mut view = base.slice_mut(slice.as_ref().as_ref());
                     view += rhs
                 } else {
                     panic!("Base must be owned."); // FIXME error
@@ -155,7 +171,7 @@ where
             ArrayRef::Owned(rhs) => self * rhs,
             ArrayRef::View(rhs, slice) => {
                 if let ArrayRef::Owned(base) = &*rhs.buffer.read().unwrap() {
-                    self * &base.slice(&*slice)
+                    self * &base.slice(slice.as_ref().as_ref())
                 } else {
                     panic!("Base must be owned."); // FIXME error
                 }
@@ -176,7 +192,7 @@ where
             ArrayRef::Owned(lhs) => lhs * rhs,
             ArrayRef::View(lhs, slice) => {
                 if let ArrayRef::Owned(base) = &*lhs.buffer.read().unwrap() {
-                    &base.slice(&*slice) * rhs
+                    &base.slice(slice.as_ref().as_ref()) * rhs
                 } else {
                     panic!("Base must be owned."); // FIXME error
                 }
@@ -191,7 +207,7 @@ impl<T: TypeNum + PartialEq> PartialEq for ArrayRef<T> {
             ArrayRef::Owned(rhs) => self == rhs,
             ArrayRef::View(rhs, slice) => {
                 if let ArrayRef::Owned(base) = &*rhs.buffer.read().unwrap() {
-                    *self == base.slice(&*slice)
+                    *self == base.slice(slice.as_ref().as_ref())
                 } else {
                     panic!("Base must be owned."); // FIXME error
                 }
@@ -208,7 +224,7 @@ impl<T: TypeNum + PartialEq, S: RawData<Elem = T> + Data> PartialEq<ArrayBase<S,
             ArrayRef::Owned(lhs) => *lhs == *rhs,
             ArrayRef::View(lhs, slice) => {
                 if let ArrayRef::Owned(base) = &*lhs.buffer.read().unwrap() {
-                    base.slice(&*slice) == *rhs
+                    base.slice(slice.as_ref().as_ref()) == *rhs
                 } else {
                     panic!("Base must be owned."); // FIXME error
                 }
@@ -220,8 +236,8 @@ impl<T: TypeNum + PartialEq, S: RawData<Elem = T> + Data> PartialEq<ArrayBase<S,
 #[derive(Debug)]
 pub struct ArraySignal<T: TypeNum> {
     name: String,
-    buffer: RwLock<ArrayRef<T>>,
-    initial_value: Py<PyArrayDyn<T>>,
+    buffer: RwLock<ArrayRef<T>>, // TODO move RwLock into ArrayRef?
+    initial_value: Option<Py<PyArrayDyn<T>>>,
     shape: Vec<Ix>,
 }
 
@@ -235,8 +251,27 @@ impl<T: TypeNum> ArraySignal<T> {
                     x => x,
                 })
             })),
-            initial_value: Py::from(initial_value),
+            initial_value: Some(Py::from(initial_value)),
             shape: initial_value.shape().to_vec(),
+        }
+    }
+
+    pub fn new_view(
+        name: String,
+        base: Arc<Self>,
+        slice: Box<SliceInfo<Vec<SliceOrIndex>, IxDyn>>,
+        initial_value: Option<&PyArrayDyn<T>>,
+    ) -> Self {
+        println!("---> {:?}", slice);
+        let shape = match &*base.buffer.read().unwrap() {
+            ArrayRef::Owned(base) => base.slice(slice.as_ref().as_ref()).shape().to_vec(), // FIXME error handling
+            ArrayRef::View(_, _) => panic!(), // FIXME error handling
+        };
+        ArraySignal {
+            name,
+            buffer: RwLock::new(ArrayRef::View(base, slice)),
+            initial_value: initial_value.map(|v| Py::from(v)),
+            shape,
         }
     }
 }
@@ -259,12 +294,14 @@ impl<T: TypeNum + Send + Sync + 'static> Signal for ArraySignal<T> {
     }
 
     fn reset(&self) {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        self.buffer
-            .write()
-            .unwrap()
-            .assign_array(&self.initial_value.as_ref(py).as_array())
+        if let Some(initial_value) = &self.initial_value {
+            let gil = Python::acquire_gil();
+            let py = gil.python();
+            self.buffer
+                .write()
+                .unwrap()
+                .assign_array(&initial_value.as_ref(py).as_array())
+        }
     }
 }
 
@@ -276,11 +313,4 @@ impl<T: TypeNum> SignalAccess<ArrayRef<T>> for ArraySignal<T> {
     fn write<'a>(&'a self) -> Box<dyn DerefMut<Target = ArrayRef<T>> + 'a> {
         Box::new(self.buffer.write().unwrap())
     }
-}
-
-#[derive(Debug)]
-pub struct ArrayViewSignal<T: TypeNum> {
-    name: String,
-    base: Arc<ArraySignal<T>>,
-    shape: StrideShape<Ix>,
 }

@@ -9,7 +9,7 @@ use crate::binding::{
     engine::PyEngine,
     operator::{PyCopy, PyElementwiseInc, PyReset, PyTimeUpdate},
     probe::PyProbe,
-    signal::{PySignalArrayF64, PySignalF64, PySignalU64},
+    signal::{PySignalArrayF64, PySignalArrayViewF64, PySignalF64, PySignalU64},
 };
 use pyo3::prelude::*;
 
@@ -17,6 +17,7 @@ use pyo3::prelude::*;
 fn engine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyEngine>()?;
     m.add_class::<PySignalArrayF64>()?;
+    m.add_class::<PySignalArrayViewF64>()?;
     m.add_class::<PySignalF64>()?;
     m.add_class::<PySignalU64>()?;
     m.add_class::<PyReset>()?;
