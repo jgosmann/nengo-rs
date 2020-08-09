@@ -216,7 +216,7 @@ impl<T: TypeNum + PartialEq, S: RawData<Elem = T> + Data> PartialEq<ArrayBase<S,
 #[derive(Debug)]
 pub struct ArraySignal<T: TypeNum> {
     name: String,
-    buffer: RwLock<ArrayRef<T>>, // TODO move RwLock into ArrayRef?
+    buffer: RwLock<ArrayRef<T>>,
     initial_value: Option<Py<PyArrayDyn<T>>>,
     shape: Vec<Ix>,
 }
