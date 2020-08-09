@@ -100,12 +100,10 @@ impl<T: TypeNum> ArrayRef<T> {
     pub fn assign(&mut self, src: &ArrayRef<T>) {
         match src {
             ArrayRef::Owned(src) => self.assign_array(&src),
-            ArrayRef::View(src, slice) => {
-                if let ArrayRef::Owned(base) = &*src.buffer.read().unwrap() {
-                    self.assign_array(&base.slice(slice.as_ref().as_ref()));
-                }
-                // FIXME error?
-            }
+            ArrayRef::View(src, slice) => match &*src.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => self.assign_array(&base.slice(slice.as_ref().as_ref())),
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
         }
     }
 
@@ -115,12 +113,10 @@ impl<T: TypeNum> ArrayRef<T> {
     ) {
         match self {
             ArrayRef::Owned(dst) => dst.assign(src),
-            ArrayRef::View(dst, slice) => {
-                if let ArrayRef::Owned(base) = &mut *dst.buffer.write().unwrap() {
-                    base.slice_mut(slice.as_ref().as_ref()).assign(src);
-                }
-                // FIXME error?
-            }
+            ArrayRef::View(dst, slice) => match &mut *dst.buffer.write().unwrap() {
+                ArrayRef::Owned(base) => base.slice_mut(slice.as_ref().as_ref()).assign(src),
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
         }
     }
 }
@@ -129,13 +125,10 @@ impl<T: TypeNum> ArrayRef<T> {
     pub fn clone_array(&self) -> ArrayD<T> {
         match self {
             ArrayRef::Owned(src) => src.clone(),
-            ArrayRef::View(src, slice) => {
-                if let ArrayRef::Owned(base) = &*src.buffer.read().unwrap() {
-                    base.slice(slice.as_ref().as_ref()).to_owned()
-                } else {
-                    panic!("Base must be owned."); // FIXME error?
-                }
-            }
+            ArrayRef::View(src, slice) => match &*src.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => base.slice(slice.as_ref().as_ref()).to_owned(),
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
         }
     }
 }
@@ -148,14 +141,13 @@ where
     fn add_assign(&mut self, rhs: &ArrayBase<S, IxDyn>) {
         match self {
             ArrayRef::Owned(lhs) => *lhs += rhs,
-            ArrayRef::View(lhs, slice) => {
-                if let ArrayRef::Owned(base) = &mut *lhs.buffer.write().unwrap() {
+            ArrayRef::View(lhs, slice) => match &mut *lhs.buffer.write().unwrap() {
+                ArrayRef::Owned(base) => {
                     let mut view = base.slice_mut(slice.as_ref().as_ref());
                     view += rhs
-                } else {
-                    panic!("Base must be owned."); // FIXME error
                 }
-            }
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
         }
     }
 }
@@ -169,13 +161,10 @@ where
     fn mul(self, rhs: &ArrayRef<T>) -> Self::Output {
         match rhs {
             ArrayRef::Owned(rhs) => self * rhs,
-            ArrayRef::View(rhs, slice) => {
-                if let ArrayRef::Owned(base) = &*rhs.buffer.read().unwrap() {
-                    self * &base.slice(slice.as_ref().as_ref())
-                } else {
-                    panic!("Base must be owned."); // FIXME error
-                }
-            }
+            ArrayRef::View(rhs, slice) => match &*rhs.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => self * &base.slice(slice.as_ref().as_ref()),
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
         }
     }
 }
@@ -190,13 +179,10 @@ where
     fn mul(self, rhs: &ArrayBase<S, IxDyn>) -> Self::Output {
         match self {
             ArrayRef::Owned(lhs) => lhs * rhs,
-            ArrayRef::View(lhs, slice) => {
-                if let ArrayRef::Owned(base) = &*lhs.buffer.read().unwrap() {
-                    &base.slice(slice.as_ref().as_ref()) * rhs
-                } else {
-                    panic!("Base must be owned."); // FIXME error
-                }
-            }
+            ArrayRef::View(lhs, slice) => match &*lhs.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => &base.slice(slice.as_ref().as_ref()) * rhs,
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
         }
     }
 }
@@ -205,13 +191,10 @@ impl<T: TypeNum + PartialEq> PartialEq for ArrayRef<T> {
     fn eq(&self, rhs: &ArrayRef<T>) -> bool {
         match rhs {
             ArrayRef::Owned(rhs) => self == rhs,
-            ArrayRef::View(rhs, slice) => {
-                if let ArrayRef::Owned(base) = &*rhs.buffer.read().unwrap() {
-                    *self == base.slice(slice.as_ref().as_ref())
-                } else {
-                    panic!("Base must be owned."); // FIXME error
-                }
-            }
+            ArrayRef::View(rhs, slice) => match &*rhs.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => *self == base.slice(slice.as_ref().as_ref()),
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
         }
     }
 }
@@ -222,13 +205,10 @@ impl<T: TypeNum + PartialEq, S: RawData<Elem = T> + Data> PartialEq<ArrayBase<S,
     fn eq(&self, rhs: &ArrayBase<S, IxDyn>) -> bool {
         match self {
             ArrayRef::Owned(lhs) => *lhs == *rhs,
-            ArrayRef::View(lhs, slice) => {
-                if let ArrayRef::Owned(base) = &*lhs.buffer.read().unwrap() {
-                    base.slice(slice.as_ref().as_ref()) == *rhs
-                } else {
-                    panic!("Base must be owned."); // FIXME error
-                }
-            }
+            ArrayRef::View(lhs, slice) => match &*lhs.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => base.slice(slice.as_ref().as_ref()) == *rhs,
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
         }
     }
 }
@@ -260,17 +240,15 @@ impl<T: TypeNum> ArraySignal<T> {
         name: String,
         base: Arc<Self>,
         slice: Box<SliceInfo<Vec<SliceOrIndex>, IxDyn>>,
-        initial_value: Option<&PyArrayDyn<T>>,
     ) -> Self {
-        println!("---> {:?}", slice);
         let shape = match &*base.buffer.read().unwrap() {
-            ArrayRef::Owned(base) => base.slice(slice.as_ref().as_ref()).shape().to_vec(), // FIXME error handling
-            ArrayRef::View(_, _) => panic!(), // FIXME error handling
+            ArrayRef::Owned(base) => base.slice(slice.as_ref().as_ref()).shape().to_vec(),
+            ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
         };
         ArraySignal {
             name,
             buffer: RwLock::new(ArrayRef::View(base, slice)),
-            initial_value: initial_value.map(|v| Py::from(v)),
+            initial_value: None,
             shape,
         }
     }

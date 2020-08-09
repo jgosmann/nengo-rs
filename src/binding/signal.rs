@@ -4,8 +4,8 @@ use ndarray::{SliceInfo, SliceOrIndex};
 use numpy::PyArrayDyn;
 use pyo3::exceptions as exc;
 use pyo3::prelude::*;
+use pyo3::types::PySlice;
 use std::any::type_name;
-use std::cmp::min;
 use std::sync::Arc;
 
 #[pyclass(name=Signal)]
@@ -57,58 +57,33 @@ pub struct PySignalArrayViewF64 {}
 #[pymethods]
 impl PySignalArrayViewF64 {
     #[new]
-    fn new(signal: &PyAny, base: &PyCell<PySignal>) -> PyResult<(Self, PySignal)> {
-        let name = signal.getattr("name")?.extract()?;
+    fn new(
+        name: String,
+        slice_info: &PyAny,
+        base: &PyCell<PySignal>,
+    ) -> PyResult<(Self, PySignal)> {
         let base: &PyCell<PySignal> = base.extract().unwrap();
         let base: Arc<ArraySignal<f64>> = base.borrow().extract_signal("base")?;
-        let initial_value = signal.getattr("initial_value")?;
-        let initial_value: Option<&PyArrayDyn<f64>> = initial_value.extract().ok();
 
-        let offset: isize = signal.getattr("elemoffset")?.extract()?;
-        let strides: Vec<isize> = signal.getattr("elemstrides")?.extract()?;
-        let shape: Vec<isize> = signal.getattr("shape")?.extract()?;
-        let base_strides: Vec<isize> = signal.getattr("base")?.getattr("elemstrides")?.extract()?;
-        let base_shape: Vec<isize> = signal.getattr("base")?.getattr("shape")?.extract()?;
+        let slice_info: Vec<&PySlice> = slice_info.extract()?;
         let slice_info = Box::new(
             SliceInfo::new(
-                Self::offset_to_multiindex(offset, &base_strides)
-                    .iter()
-                    .zip(shape)
-                    .zip(Self::strides_to_steps(&strides, &base_strides))
-                    .zip(base_shape)
-                    .map(|(((start, size), step), base_size)| SliceOrIndex::Slice {
-                        start: *start,
-                        step: step,
-                        end: Some(min(start + step * size, base_size)),
+                slice_info
+                    .into_iter()
+                    .map(|py_slice| {
+                        Ok(SliceOrIndex::Slice {
+                            start: py_slice.getattr("start")?.extract()?,
+                            step: py_slice.getattr("step")?.extract()?,
+                            end: Some(py_slice.getattr("stop")?.extract()?),
+                        })
                     })
-                    .collect(),
+                    .collect::<PyResult<Vec<SliceOrIndex>>>()?,
             )
             .unwrap(),
         );
 
-        let signal = Arc::new(ArraySignal::new_view(name, base, slice_info, initial_value));
+        let signal = Arc::new(ArraySignal::new_view(name, base, slice_info));
         Ok((Self {}, PySignal { signal }))
-    }
-}
-
-impl PySignalArrayViewF64 {
-    fn offset_to_multiindex(offset: isize, base_strides: &Vec<isize>) -> Vec<isize> {
-        base_strides
-            .iter()
-            .scan(offset, |remainder, &divisor| {
-                let index = *remainder / divisor;
-                *remainder = *remainder % divisor;
-                Some(index)
-            })
-            .collect()
-    }
-
-    fn strides_to_steps(strides: &Vec<isize>, base_strides: &Vec<isize>) -> Vec<isize> {
-        strides
-            .iter()
-            .zip(base_strides)
-            .map(|(stride, base_stride)| stride / base_stride)
-            .collect()
     }
 }
 
@@ -238,18 +213,6 @@ mod tests {
     }
 
     #[test]
-    fn test_py_signal_array_view_f64() {
-        test_binding::<_, ArraySignal<f64>>(
-            "(lambda s, nengo, base: s.SignalArrayViewF64(
-                base[1::2],
-                s.SignalArrayF64(base)))(s, nengo, nengo.builder.signal.Signal(np.array([0., 1., 0., 2.]), name='BaseSignal'))",
-            "BaseSignal[(slice(1, None, 2),)]",
-            &[2],
-            ArrayRef::Owned(array![1., 2.].into_dimensionality::<IxDyn>().unwrap()),
-        );
-    }
-
-    #[test]
     fn test_py_signal_array_view_f64_x() {
         let gil = Python::acquire_gil();
         let py = gil.python();
@@ -301,7 +264,7 @@ mod tests {
 
         let py_signal = py
             .eval(
-                "s.SignalArrayViewF64(base_nengo_signal[1::2], base_signal)",
+                "s.SignalArrayViewF64('view_signal', (slice(1, 4, 2),), base_signal)",
                 None,
                 Some(locals),
             )
@@ -374,7 +337,7 @@ mod tests {
 
         let py_signal = py
             .eval(
-                "s.SignalArrayViewF64(base_nengo_signal[1:2, ::2, 1:4:2], base_signal)",
+                "s.SignalArrayViewF64('view_signal', (slice(1, 2, 1), slice(0, 4, 2), slice(1, 4, 2)), base_signal)",
                 None,
                 Some(locals),
             )
@@ -411,34 +374,6 @@ mod tests {
             "TestSignal",
             &[],
             2.,
-        );
-    }
-
-    #[test]
-    fn test_offset_to_multiindex() {
-        assert_eq!(
-            PySignalArrayViewF64::offset_to_multiindex(3, &vec![1]),
-            vec![3]
-        );
-        assert_eq!(
-            PySignalArrayViewF64::offset_to_multiindex(10, &vec![8, 4, 1]),
-            vec![1, 0, 2]
-        );
-        assert_eq!(
-            PySignalArrayViewF64::offset_to_multiindex(215, &vec![60, 12, 6, 1]),
-            vec![3, 2, 1, 5]
-        );
-    }
-
-    #[test]
-    fn test_strides_to_steps() {
-        assert_eq!(
-            PySignalArrayViewF64::strides_to_steps(&vec![1], &vec![1]),
-            vec![1]
-        );
-        assert_eq!(
-            PySignalArrayViewF64::strides_to_steps(&vec![480, 192, 192, 24], &vec![480, 96, 48, 8]),
-            vec![1, 2, 4, 3]
         );
     }
 }

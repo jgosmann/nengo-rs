@@ -5,6 +5,7 @@ from nengo.utils.graphs import BidirectionalDAG, toposort
 from nengo.utils.simulator import operator_dependency_graph
 import numpy as np
 
+from .index_conv import slices_from_signal
 from .engine import (
     Engine,
     SignalArrayF64,
@@ -26,9 +27,23 @@ class Simulator:
         elif signal.base is None or signal is signal.base:
             signal_to_engine_id[signal] = SignalArrayF64(signal)
         else:
-            self.add_sig(signal_to_engine_id, signal.base)
+            current = signal
+            sliceinfo = sliceinfo_for_signal(signal)
+            while (
+                current.base.base is not None and current.base.base is not current.base
+            ):
+                current = current.base
+                slice_info = tuple(
+                    slice(
+                        b.start + b.step * a.start,
+                        b.start + b.step * a.stop,
+                        a.step * b.step,
+                    )
+                    for a, b in zip(sliceinfo, slices_from_signal(current))
+                )
+            self.add_sig(signal_to_engine_id, current.base)
             signal_to_engine_id[signal] = SignalArrayViewF64(
-                signal, signal_to_engine_id[signal.base]
+                signal, slice_info, signal_to_engine_id[current.base]
             )
 
     def get_sig(self, signal_to_engine_id, signal):
