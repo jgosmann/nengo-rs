@@ -1,7 +1,8 @@
 use crate::signal::{ArraySignal, ScalarSignal, Signal, SignalAccess};
 use ndarray::ArrayD;
-use numpy::TypeNum;
+use numpy::Element;
 use std::any::Any;
+use std::fmt::Debug;
 use std::sync::Arc;
 
 pub trait Probe {
@@ -23,7 +24,7 @@ impl<T, S: Signal> SignalProbe<T, S> {
     }
 }
 
-impl<T: TypeNum + Send + Sync + 'static> Probe for SignalProbe<ArrayD<T>, ArraySignal<T>> {
+impl<T: Element + Debug + Send + Sync + 'static> Probe for SignalProbe<ArrayD<T>, ArraySignal<T>> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -33,7 +34,7 @@ impl<T: TypeNum + Send + Sync + 'static> Probe for SignalProbe<ArrayD<T>, ArrayS
     }
 }
 
-impl<T: TypeNum + Send + Sync + 'static> SignalProbe<ArrayD<T>, ArraySignal<T>> {
+impl<T: Element + Debug + Send + Sync + 'static> SignalProbe<ArrayD<T>, ArraySignal<T>> {
     pub fn get_data(&self) -> &Vec<ArrayD<T>> {
         &self.data
     }
@@ -43,7 +44,7 @@ impl<T: TypeNum + Send + Sync + 'static> SignalProbe<ArrayD<T>, ArraySignal<T>> 
     }
 }
 
-impl<T: TypeNum + Send + Sync + 'static> Probe for SignalProbe<T, ScalarSignal<T>> {
+impl<T: Element + Copy + Debug + Send + Sync + 'static> Probe for SignalProbe<T, ScalarSignal<T>> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -53,7 +54,7 @@ impl<T: TypeNum + Send + Sync + 'static> Probe for SignalProbe<T, ScalarSignal<T
     }
 }
 
-impl<T: TypeNum + Send + Sync + 'static> SignalProbe<T, ScalarSignal<T>> {
+impl<T: Element + Copy + Debug + Send + Sync + 'static> SignalProbe<T, ScalarSignal<T>> {
     pub fn get_data(&self) -> &Vec<T> {
         &self.data
     }

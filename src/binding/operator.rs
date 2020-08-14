@@ -23,17 +23,23 @@ impl Wrapper<Arc<OperatorNode>> for PyOperator {
 macro_rules! bind_op {
     (
         $name:ident: $op_type:ident $(< $($op_typearg:ty),+ >)?,
-        ($(arg $aname:ident : $atype:ty,)*
-        $(sig $sig:ident),*), {$($fname:ident : $expr:expr),*}
+        {
+            $(args: ($($aname:ident : $atype:ty),*),)?
+            $(signals: [$($sig:ident),*],)?
+            $(optionals: [$($optsig:ident),*],)?
+        }, {$($fname:ident : $expr:expr),*}
     ) => {
         #[pymethods]
         impl $name {
             #[new]
             fn new(
-                $($aname: $atype,)*
-                $(
+                $($($aname: $atype,)*)?
+                $($(
                     $sig : &PySignal,
-                )*
+                )*)?
+                $($(
+                    $optsig : Option<&PySignal>,
+                )*)?
                 dependencies: Vec<usize>,
             ) -> PyResult<(Self, PyOperator)> {
                 Ok((
@@ -41,9 +47,15 @@ macro_rules! bind_op {
                     PyOperator {
                         node: Arc::new(OperatorNode {
                             operator: Box::new(operator::$op_type$(::<$($op_typearg,)*>)? {
-                                $(
-                                    $sig : $sig.extract_signal("$sig")?,
-                                )*
+                                $($(
+                                    $sig : $sig.extract_signal(stringify!($sig))?,
+                                )*)?
+                                $($(
+                                    $optsig: match $optsig {
+                                        Some(sig) => Some(sig.extract_signal(stringify!($optsig))?),
+                                        None => None
+                                    },
+                                )*)?
                                 $($fname: $expr,)*
                             }),
                             dependencies,
@@ -60,7 +72,10 @@ pub struct PyReset {}
 
 bind_op!(
     PyReset: Reset<ArrayD<f64>, ArraySignal<f64>>,
-    (arg value: &PyAny, sig target),
+    {
+        args: (value: &PyAny),
+        signals: [target],
+    },
     {value: value.extract::<&PyArrayDyn<f64>>()?.to_owned_array()}
 );
 
@@ -69,7 +84,10 @@ pub struct PyTimeUpdate {}
 
 bind_op!(
     PyTimeUpdate: TimeUpdate<f64, u64>,
-    (arg dt: f64, sig step_target, sig time_target),
+    {
+        args: (dt: f64),
+        signals: [step_target, time_target],
+    },
     { dt: dt }
 );
 
@@ -78,7 +96,7 @@ pub struct PyElementwiseInc {}
 
 bind_op!(
     PyElementwiseInc: ElementwiseInc<f64>,
-    (sig target, sig left, sig right),
+    {signals: [target, left, right],},
     {}
 );
 
@@ -87,8 +105,21 @@ pub struct PyCopy {}
 
 bind_op!(
     PyCopy: CopyOp<ArrayD<f64>, ArraySignal<f64>>,
-    (sig src, sig dst),
+    {signals: [src, dst],},
     { data_type: PhantomData }
+);
+
+#[pyclass(extends=PyOperator, name=SimPyFunc)]
+pub struct PySimPyFunc {}
+
+bind_op!(
+    PySimPyFunc: SimPyFunc<f64>,
+    {
+        args: (py_fn: &PyAny),
+        signals: [output],
+        optionals: [t, x],
+    },
+    {py_fn: py_fn.into()}
 );
 
 #[cfg(test)]
@@ -103,6 +134,7 @@ mod tests {
         m.add_class::<PyCopy>()?;
         m.add_class::<PyElementwiseInc>()?;
         m.add_class::<PyReset>()?;
+        m.add_class::<PySimPyFunc>()?;
         m.add_class::<PyTimeUpdate>()?;
 
         m.add_class::<PySignalF64>()?;
@@ -157,6 +189,24 @@ mod tests {
         can_instantiate(&format!(
             "o.Reset(np.zeros(1), {}, [0])",
             DUMMY_SIGNAL_CONSTRUCTOR
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn can_instantiate_sim_py_func() {
+        can_instantiate(&format!(
+            "o.SimPyFunc(lambda t, x: None, {}, o.SignalF64('time', 0.), {}, [0])",
+            DUMMY_SIGNAL_CONSTRUCTOR, DUMMY_SIGNAL_CONSTRUCTOR,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn can_instantiate_sim_py_func_without_optional_signals() {
+        can_instantiate(&format!(
+            "o.SimPyFunc(lambda t, x: None, {}, None, None, [0])",
+            DUMMY_SIGNAL_CONSTRUCTOR,
         ))
         .unwrap();
     }

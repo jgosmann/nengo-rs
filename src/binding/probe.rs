@@ -45,7 +45,9 @@ impl PyProbe {
         let py = gil.python();
         let copy = PyArrayDyn::new(py, [&[data.len()], probe.shape()].concat(), false);
         for (i, x) in data.iter().enumerate() {
-            copy.as_array_mut().index_axis_mut(Axis(0), i).assign(x);
+            unsafe {
+                copy.as_array_mut().index_axis_mut(Axis(0), i).assign(x);
+            }
         }
         Ok(copy.to_object(py))
     }
@@ -116,7 +118,7 @@ mod tests {
             .unwrap();
         let data: &PyArrayDyn<f64> = data.extract().unwrap();
         assert_eq!(
-            data.as_array(),
+            data.readonly().as_array(),
             array![[1., 2.], [42., 42.]]
                 .into_dimensionality::<IxDyn>()
                 .unwrap()

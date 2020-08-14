@@ -1,7 +1,7 @@
 use crate::operator::Operator;
 use crate::signal::{ArraySignal, ScalarSignal, Signal, SignalAccess};
 use ndarray::ArrayD;
-use numpy::TypeNum;
+use numpy::Element;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -13,7 +13,7 @@ where
     pub target: Arc<S>,
 }
 
-impl<T: TypeNum + Send + Sync + 'static> Operator for Reset<ArrayD<T>, ArraySignal<T>> {
+impl<T: Element + Debug + Send + Sync + 'static> Operator for Reset<ArrayD<T>, ArraySignal<T>> {
     fn step(&self) {
         self.target.write().assign_array(&self.value);
     }

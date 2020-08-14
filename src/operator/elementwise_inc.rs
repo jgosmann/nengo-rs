@@ -1,12 +1,12 @@
 use crate::operator::Operator;
 use crate::signal::{ArraySignal, SignalAccess};
 use core::ops::{AddAssign, Mul};
-use numpy::TypeNum;
+use numpy::Element;
 use std::sync::Arc;
 
 pub struct ElementwiseInc<T>
 where
-    T: TypeNum,
+    T: Element,
 {
     pub target: Arc<ArraySignal<T>>,
     pub left: Arc<ArraySignal<T>>,
@@ -15,7 +15,7 @@ where
 
 impl<T> Operator for ElementwiseInc<T>
 where
-    T: TypeNum + Mul<T, Output = T> + AddAssign<T>,
+    T: Element + Mul<T, Output = T> + AddAssign<T>,
 {
     fn step(&self) {
         let left = self.left.read();

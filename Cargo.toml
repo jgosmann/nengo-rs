@@ -12,9 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 ndarray = "0.13.1"
-
-[dependencies.numpy]
-git = "https://github.com/PyO3/rust-numpy.git"
+numpy = "0.11.0"
 
 [dependencies.futures]
 version = "0.3.5"

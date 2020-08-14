@@ -1,7 +1,7 @@
 use ndarray::{
     Array, ArrayBase, ArrayD, Data, Dimension, Ix, IxDyn, RawData, SliceInfo, SliceOrIndex,
 };
-use numpy::{PyArrayDyn, TypeNum};
+use numpy::{Element, PyArrayDyn};
 use pyo3::prelude::*;
 use std::any::Any;
 use std::fmt::Debug;
@@ -73,7 +73,7 @@ impl<T> SignalAccess<T> for ScalarSignal<T> {
     }
 }
 
-pub enum ArrayRef<T: TypeNum> {
+pub enum ArrayRef<T: Element> {
     Owned(ArrayD<T>),
     View(
         Arc<ArraySignal<T>>,
@@ -81,7 +81,7 @@ pub enum ArrayRef<T: TypeNum> {
     ),
 }
 
-impl<T: TypeNum + Debug> Debug for ArrayRef<T> {
+impl<T: Element + Debug> Debug for ArrayRef<T> {
     fn fmt(
         &self,
         formatter: &mut std::fmt::Formatter<'_>,
@@ -96,7 +96,7 @@ impl<T: TypeNum + Debug> Debug for ArrayRef<T> {
     }
 }
 
-impl<T: TypeNum> ArrayRef<T> {
+impl<T: Element> ArrayRef<T> {
     pub fn assign(&mut self, src: &ArrayRef<T>) {
         match src {
             ArrayRef::Owned(src) => self.assign_array(&src),
@@ -121,7 +121,7 @@ impl<T: TypeNum> ArrayRef<T> {
     }
 }
 
-impl<T: TypeNum> ArrayRef<T> {
+impl<T: Element> ArrayRef<T> {
     pub fn clone_array(&self) -> ArrayD<T> {
         match self {
             ArrayRef::Owned(src) => src.clone(),
@@ -131,11 +131,23 @@ impl<T: TypeNum> ArrayRef<T> {
             },
         }
     }
+
+    pub fn to_py_array<'py>(&self, py: Python<'py>) -> &'py PyArrayDyn<T> {
+        match self {
+            ArrayRef::Owned(array) => PyArrayDyn::from_array(py, array),
+            ArrayRef::View(base, slice) => match &*base.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => {
+                    PyArrayDyn::from_array(py, &base.slice(slice.as_ref().as_ref()))
+                }
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
+        }
+    }
 }
 
 impl<T, S> AddAssign<&ArrayBase<S, IxDyn>> for ArrayRef<T>
 where
-    T: TypeNum + AddAssign<T> + Clone,
+    T: Element + AddAssign<T> + Clone,
     S: RawData<Elem = T> + Data,
 {
     fn add_assign(&mut self, rhs: &ArrayBase<S, IxDyn>) {
@@ -154,7 +166,7 @@ where
 
 impl<T> Mul<&ArrayRef<T>> for &ArrayRef<T>
 where
-    T: TypeNum + Mul<T, Output = T> + Clone,
+    T: Element + Mul<T, Output = T> + Clone,
 {
     type Output = ArrayD<T>;
 
@@ -171,7 +183,7 @@ where
 
 impl<T, S> Mul<&ArrayBase<S, IxDyn>> for &ArrayRef<T>
 where
-    T: TypeNum + Mul<T, Output = T> + Clone,
+    T: Element + Mul<T, Output = T> + Clone,
     S: RawData<Elem = T> + Data,
 {
     type Output = ArrayD<T>;
@@ -187,7 +199,7 @@ where
     }
 }
 
-impl<T: TypeNum + PartialEq> PartialEq for ArrayRef<T> {
+impl<T: Element + PartialEq> PartialEq for ArrayRef<T> {
     fn eq(&self, rhs: &ArrayRef<T>) -> bool {
         match rhs {
             ArrayRef::Owned(rhs) => self == rhs,
@@ -199,7 +211,7 @@ impl<T: TypeNum + PartialEq> PartialEq for ArrayRef<T> {
     }
 }
 
-impl<T: TypeNum + PartialEq, S: RawData<Elem = T> + Data> PartialEq<ArrayBase<S, IxDyn>>
+impl<T: Element + PartialEq, S: RawData<Elem = T> + Data> PartialEq<ArrayBase<S, IxDyn>>
     for ArrayRef<T>
 {
     fn eq(&self, rhs: &ArrayBase<S, IxDyn>) -> bool {
@@ -214,14 +226,14 @@ impl<T: TypeNum + PartialEq, S: RawData<Elem = T> + Data> PartialEq<ArrayBase<S,
 }
 
 #[derive(Debug)]
-pub struct ArraySignal<T: TypeNum> {
+pub struct ArraySignal<T: Element> {
     name: String,
     buffer: RwLock<ArrayRef<T>>,
     initial_value: Option<Py<PyArrayDyn<T>>>,
     shape: Vec<Ix>,
 }
 
-impl<T: TypeNum> ArraySignal<T> {
+impl<T: Element + Copy> ArraySignal<T> {
     pub fn new(name: String, initial_value: &PyArrayDyn<T>) -> Self {
         ArraySignal {
             name,
@@ -254,7 +266,7 @@ impl<T: TypeNum> ArraySignal<T> {
     }
 }
 
-impl<T: TypeNum + Send + Sync + 'static> Signal for ArraySignal<T> {
+impl<T: Element + Debug + Send + Sync + 'static> Signal for ArraySignal<T> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -278,12 +290,12 @@ impl<T: TypeNum + Send + Sync + 'static> Signal for ArraySignal<T> {
             self.buffer
                 .write()
                 .unwrap()
-                .assign_array(&initial_value.as_ref(py).as_array())
+                .assign_array(&initial_value.as_ref(py).readonly().as_array());
         }
     }
 }
 
-impl<T: TypeNum> SignalAccess<ArrayRef<T>> for ArraySignal<T> {
+impl<T: Element> SignalAccess<ArrayRef<T>> for ArraySignal<T> {
     fn read<'a>(&'a self) -> Box<dyn Deref<Target = ArrayRef<T>> + 'a> {
         Box::new(self.buffer.read().unwrap())
     }

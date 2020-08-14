@@ -1,7 +1,7 @@
 use crate::operator::Operator;
 use crate::signal::{ArraySignal, ScalarSignal, SignalAccess};
 use ndarray::ArrayD;
-use numpy::TypeNum;
+use numpy::Element;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ pub struct CopyOp<T, S> {
     pub data_type: PhantomData<T>,
 }
 
-impl<T: TypeNum> Operator for CopyOp<ArrayD<T>, ArraySignal<T>> {
+impl<T: Element> Operator for CopyOp<ArrayD<T>, ArraySignal<T>> {
     fn step(&self) {
         self.dst.write().assign(&self.src.read());
     }

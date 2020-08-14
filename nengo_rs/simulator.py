@@ -17,6 +17,7 @@ from .engine import (
     ElementwiseInc,
     Copy,
     Probe,
+    SimPyFunc,
 )
 
 
@@ -28,12 +29,12 @@ class Simulator:
             signal_to_engine_id[signal] = SignalArrayF64(signal)
         else:
             current = signal
-            sliceinfo = sliceinfo_for_signal(signal)
+            sliceinfo = slices_from_signal(signal)
             while (
                 current.base.base is not None and current.base.base is not current.base
             ):
                 current = current.base
-                slice_info = tuple(
+                sliceinfo = tuple(
                     slice(
                         b.start + b.step * a.start,
                         b.start + b.step * a.stop,
@@ -43,7 +44,7 @@ class Simulator:
                 )
             self.add_sig(signal_to_engine_id, current.base)
             signal_to_engine_id[signal] = SignalArrayViewF64(
-                signal, slice_info, signal_to_engine_id[current.base]
+                signal, sliceinfo, signal_to_engine_id[current.base]
             )
 
     def get_sig(self, signal_to_engine_id, signal):
@@ -106,6 +107,20 @@ class Simulator:
                     Copy(
                         self.get_sig(signal_to_engine_id, op.src),
                         self.get_sig(signal_to_engine_id, op.dst),
+                        dependencies,
+                    )
+                )
+            elif isinstance(op, core_op.SimPyFunc):
+                ops.append(
+                    SimPyFunc(
+                        lambda *args, op=op: np.asarray(op.fn(*args)),
+                        self.get_sig(signal_to_engine_id, op.output),
+                        None
+                        if op.t is None
+                        else self.get_sig(signal_to_engine_id, op.t),
+                        None
+                        if op.x is None
+                        else self.get_sig(signal_to_engine_id, op.x),
                         dependencies,
                     )
                 )
