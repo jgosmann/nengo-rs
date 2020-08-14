@@ -1,3 +1,5 @@
+use ndarray::prelude::*;
+use ndarray::LinalgScalar;
 use ndarray::{
     Array, ArrayBase, ArrayD, Data, Dimension, Ix, IxDyn, RawData, SliceInfo, SliceOrIndex,
 };
@@ -138,6 +140,60 @@ impl<T: Element> ArrayRef<T> {
             ArrayRef::View(base, slice) => match &*base.buffer.read().unwrap() {
                 ArrayRef::Owned(base) => {
                     PyArrayDyn::from_array(py, &base.slice(slice.as_ref().as_ref()))
+                }
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
+        }
+    }
+}
+
+impl<T: Element + LinalgScalar> ArrayRef<T> {
+    pub fn dot_array_1d<S: RawData<Elem = T> + Data>(&self, rhs: &ArrayBase<S, Ix1>) -> ArrayD<T> {
+        match self {
+            ArrayRef::Owned(lhs) => match lhs.ndim() {
+                1 => {
+                    let lhs = lhs.view().into_dimensionality::<Ix1>().unwrap();
+                    array![lhs.dot(rhs)].into_dyn()
+                }
+                2 => lhs
+                    .view()
+                    .into_dimensionality::<Ix2>()
+                    .unwrap()
+                    .dot(rhs)
+                    .into_dyn(),
+                _ => panic!("Invalid array dimensionality."),
+            },
+            ArrayRef::View(lhs, slice) => match &*lhs.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => {
+                    let view = base.slice(slice.as_ref().as_ref());
+                    match view.ndim() {
+                        1 => array![view.into_dimensionality::<Ix1>().unwrap().dot(rhs)].into_dyn(),
+                        2 => view
+                            .into_dimensionality::<Ix2>()
+                            .unwrap()
+                            .dot(rhs)
+                            .into_dyn(),
+                        _ => panic!("Invalid array dimensionality."),
+                    }
+                }
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
+        }
+    }
+
+    pub fn dot(&self, rhs: &ArrayRef<T>) -> ArrayD<T> {
+        match rhs {
+            ArrayRef::Owned(rhs) => match rhs.ndim() {
+                1 => self.dot_array_1d(&rhs.view().into_dimensionality::<Ix1>().unwrap()),
+                _ => panic!("Only matrix-vector multiplies supported."),
+            },
+            ArrayRef::View(rhs, slice) => match &*rhs.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => {
+                    let view = base.slice(slice.as_ref().as_ref());
+                    match view.ndim() {
+                        1 => self.dot_array_1d(&view.into_dimensionality::<Ix1>().unwrap()),
+                        _ => panic!("Only matrix-vector multiplies supported."),
+                    }
                 }
                 ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
             },

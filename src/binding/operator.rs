@@ -109,6 +109,15 @@ bind_op!(
     { data_type: PhantomData }
 );
 
+#[pyclass(extends=PyOperator, name=DotInc)]
+pub struct PyDotInc {}
+
+bind_op!(
+    PyDotInc: DotInc<f64>,
+    {signals: [target, left, right],},
+    {}
+);
+
 #[pyclass(extends=PyOperator, name=SimPyFunc)]
 pub struct PySimPyFunc {}
 
@@ -132,6 +141,7 @@ mod tests {
     #[pymodule]
     fn operator(_py: Python, m: &PyModule) -> PyResult<()> {
         m.add_class::<PyCopy>()?;
+        m.add_class::<PyDotInc>()?;
         m.add_class::<PyElementwiseInc>()?;
         m.add_class::<PyReset>()?;
         m.add_class::<PySimPyFunc>()?;
@@ -171,6 +181,15 @@ mod tests {
         can_instantiate(&format!(
             "o.Copy({}, {}, [0])",
             DUMMY_SIGNAL_CONSTRUCTOR, DUMMY_SIGNAL_CONSTRUCTOR
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn can_instantiate_dot_inc() {
+        can_instantiate(&format!(
+            "o.DotInc({}, {}, {}, [0])",
+            DUMMY_SIGNAL_CONSTRUCTOR, DUMMY_SIGNAL_CONSTRUCTOR, DUMMY_SIGNAL_CONSTRUCTOR
         ))
         .unwrap();
     }

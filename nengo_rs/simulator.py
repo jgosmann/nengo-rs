@@ -16,6 +16,7 @@ from .engine import (
     TimeUpdate,
     ElementwiseInc,
     Copy,
+    DotInc,
     Probe,
     SimPyFunc,
 )
@@ -107,6 +108,15 @@ class Simulator:
                     Copy(
                         self.get_sig(signal_to_engine_id, op.src),
                         self.get_sig(signal_to_engine_id, op.dst),
+                        dependencies,
+                    )
+                )
+            elif isinstance(op, core_op.DotInc):
+                ops.append(
+                    DotInc(
+                        self.get_sig(signal_to_engine_id, op.Y),
+                        self.get_sig(signal_to_engine_id, op.A),
+                        self.get_sig(signal_to_engine_id, op.X),
                         dependencies,
                     )
                 )
