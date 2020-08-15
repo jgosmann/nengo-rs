@@ -46,9 +46,15 @@ class Simulator:
                     for a, b in zip(sliceinfo, slices_from_signal(current))
                 )
             self.add_sig(signal_to_engine_id, current.base)
-            signal_to_engine_id[signal] = SignalArrayViewF64(
-                signal, sliceinfo, signal_to_engine_id[current.base]
-            )
+            try:
+                signal_to_engine_id[signal] = SignalArrayViewF64(
+                    signal.name, sliceinfo, signal_to_engine_id[current.base]
+                )
+            except TypeError:
+                print(
+                    f"TypeError: {signal.name} {sliceinfo} {current.base} {signal_to_engine_id[current.base]}"
+                )
+                raise
 
     def get_sig(self, signal_to_engine_id, signal):
         self.add_sig(signal_to_engine_id, signal)
@@ -148,7 +154,7 @@ class Simulator:
                     )
                 )
             else:
-                print("missing:", op)
+                raise Exception(f"missing: {op}")
 
         self.probe_mapping = {}
         for probe in self.model.probes:
