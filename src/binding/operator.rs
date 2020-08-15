@@ -135,6 +135,22 @@ bind_op!(
     }
 );
 
+#[pyclass(extends=PyOperator, name=SimProcess)]
+pub struct PySimProcess {}
+
+bind_op!(
+    PySimProcess: SimProcess<f64>,
+    {
+        args: (mode_inc: bool, step_fn: &PyAny),
+        signals: [t, output],
+        optionals: [input],
+    },
+    {
+        mode_inc: mode_inc,
+        step_fn: step_fn.into()
+    }
+);
+
 #[pyclass(extends=PyOperator, name=SimPyFunc)]
 pub struct PySimPyFunc {}
 
@@ -162,6 +178,7 @@ mod tests {
         m.add_class::<PyElementwiseInc>()?;
         m.add_class::<PyReset>()?;
         m.add_class::<PySimNeurons>()?;
+        m.add_class::<PySimProcess>()?;
         m.add_class::<PySimPyFunc>()?;
         m.add_class::<PyTimeUpdate>()?;
 
@@ -235,6 +252,24 @@ mod tests {
         can_instantiate(&format!(
             "o.SimNeurons(0.001, lambda dt, J, output: None, dict(), {}, {}, [0])",
             DUMMY_SIGNAL_CONSTRUCTOR, DUMMY_SIGNAL_CONSTRUCTOR
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn can_instantiate_sim_process() {
+        can_instantiate(&format!(
+            "o.SimProcess(False, lambda t, input: None, o.SignalF64('time', 0.), {}, {}, [0])",
+            DUMMY_SIGNAL_CONSTRUCTOR, DUMMY_SIGNAL_CONSTRUCTOR
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn can_instantiate_sim_process_without_optional_signals() {
+        can_instantiate(&format!(
+            "o.SimProcess(False, lambda t: None, o.SignalF64('time', 0.), {}, None, [0])",
+            DUMMY_SIGNAL_CONSTRUCTOR
         ))
         .unwrap();
     }
