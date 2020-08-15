@@ -221,6 +221,21 @@ where
     }
 }
 
+impl<T> AddAssign<&ArrayRef<T>> for ArrayRef<T>
+where
+    T: Element + AddAssign<T> + Clone,
+{
+    fn add_assign(&mut self, rhs: &ArrayRef<T>) {
+        match rhs {
+            ArrayRef::Owned(rhs) => *self += rhs,
+            ArrayRef::View(rhs, slice) => match &*rhs.buffer.read().unwrap() {
+                ArrayRef::Owned(base) => *self += &base.slice(slice.as_ref().as_ref()),
+                ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
+            },
+        }
+    }
+}
+
 impl<T> Mul<&ArrayRef<T>> for &ArrayRef<T>
 where
     T: Element + Mul<T, Output = T> + Clone + Copy + ScalarOperand,

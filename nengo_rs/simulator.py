@@ -117,6 +117,7 @@ class Simulator:
                 assert op.src_slice is None and op.dst_slice is None
                 ops.append(
                     Copy(
+                        op.inc,
                         self.get_sig(signal_to_engine_id, op.src),
                         self.get_sig(signal_to_engine_id, op.dst),
                         dependencies,

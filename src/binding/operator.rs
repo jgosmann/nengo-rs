@@ -106,8 +106,11 @@ pub struct PyCopy {}
 
 bind_op!(
     PyCopy: CopyOp<ArrayD<f64>, ArraySignal<f64>>,
-    {signals: [src, dst],},
-    { data_type: PhantomData }
+    {
+        args: (inc: bool),
+        signals: [src, dst],
+    },
+    { inc: inc, data_type: PhantomData }
 );
 
 #[pyclass(extends=PyOperator, name=DotInc)]
@@ -214,7 +217,7 @@ mod tests {
     #[test]
     fn can_instantiate_copy() {
         can_instantiate(&format!(
-            "o.Copy({}, {}, [0])",
+            "o.Copy(False, {}, {}, [0])",
             DUMMY_SIGNAL_CONSTRUCTOR, DUMMY_SIGNAL_CONSTRUCTOR
         ))
         .unwrap();
