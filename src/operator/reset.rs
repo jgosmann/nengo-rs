@@ -5,6 +5,7 @@ use numpy::Element;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct Reset<T, S>
 where
     S: Signal,

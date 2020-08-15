@@ -2,6 +2,7 @@ from nengo.builder import Model
 from nengo.builder import operator as core_op
 from nengo.builder import neurons
 from nengo.builder import processes
+from nengo.builder.signal import SignalDict
 from nengo.cache import get_default_decoder_cache
 from nengo.utils.graphs import BidirectionalDAG, toposort
 from nengo.utils.simulator import operator_dependency_graph
@@ -131,26 +132,34 @@ class Simulator:
                     )
                 )
             elif isinstance(op, neurons.SimNeurons):
+                signals = SignalDict()
+                op.init_signals(signals)
                 ops.append(
                     SimNeurons(
                         self.dt,
-                        op.neurons.step,
-                        {k: self.model.sig[op][s] for k, s in op.state.items()},
+                        op.neurons.step_math,
+                        [signals[s] for s in op.states]
+                        if hasattr(op, "states")
+                        else [],
                         self.get_sig(signal_to_engine_id, op.J),
                         self.get_sig(signal_to_engine_id, op.output),
                         dependencies,
                     )
                 )
             elif isinstance(op, processes.SimProcess):
+                signals = SignalDict()
+                op.init_signals(signals)
                 shape_in = (0,) if op.input is None else op.input.shape
                 shape_out = op.output.shape
                 rng = None
-                state = ({k: self.model.sig[op][s] for k, s in op.state.items()},)
+                state = {k: signals[s] for k, s in op.state.items()}
                 step_fn = op.process.make_step(shape_in, shape_out, self.dt, rng, state)
                 ops.append(
                     SimProcess(
                         op.mode == "inc",
-                        step_fn,
+                        lambda *args, step_fn=step_fn: np.asarray(
+                            step_fn(*args), dtype=float
+                        ),
                         self.get_sig(signal_to_engine_id, op.t),
                         self.get_sig(signal_to_engine_id, op.output),
                         None
@@ -162,7 +171,7 @@ class Simulator:
             elif isinstance(op, core_op.SimPyFunc):
                 ops.append(
                     SimPyFunc(
-                        lambda *args, op=op: np.asarray(op.fn(*args)),
+                        lambda *args, op=op: np.asarray(op.fn(*args), dtype=float),
                         self.get_sig(signal_to_engine_id, op.output),
                         None
                         if op.t is None

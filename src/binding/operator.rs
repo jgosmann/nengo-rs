@@ -6,7 +6,7 @@ use crate::signal::ArraySignal;
 use ndarray::ArrayD;
 use numpy::PyArrayDyn;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::PyList;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -125,7 +125,7 @@ pub struct PySimNeurons {}
 bind_op!(
     PySimNeurons: SimNeurons<f64>,
     {
-        args: (dt: f64, step_fn: &PyAny, state: &PyDict),
+        args: (dt: f64, step_fn: &PyAny, state: &PyList),
         signals: [input_current, output],
     },
     {
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn can_instantiate_sim_neurons() {
         can_instantiate(&format!(
-            "o.SimNeurons(0.001, lambda dt, J, output: None, dict(), {}, {}, [0])",
+            "o.SimNeurons(0.001, lambda dt, J, output: None, [], {}, {}, [0])",
             DUMMY_SIGNAL_CONSTRUCTOR, DUMMY_SIGNAL_CONSTRUCTOR
         ))
         .unwrap();

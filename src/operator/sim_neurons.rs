@@ -3,12 +3,13 @@ use crate::signal::{ArraySignal, Signal, SignalAccess};
 use numpy::Element;
 use numpy::PyArrayDyn;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::PyList;
 use pyo3::types::PyTuple;
 use std::fmt::Debug;
 use std::sync::Arc;
 
 // TODO: implement support for probing state signals
+#[derive(Debug)]
 pub struct SimNeurons<T>
 where
     T: Element,
@@ -16,7 +17,7 @@ where
     pub dt: T,
     pub input_current: Arc<ArraySignal<T>>,
     pub output: Arc<ArraySignal<T>>,
-    pub state: Py<PyDict>,
+    pub state: Py<PyList>,
     pub step_fn: PyObject,
 }
 
@@ -31,16 +32,18 @@ where
         let dt = self.dt.to_object(py);
         let input_current = self.input_current.read().to_py_array(py);
         let output = PyArrayDyn::new(py, self.output.shape(), false);
-        let args = PyTuple::new(
-            py,
-            vec![dt, input_current.to_object(py), output.to_object(py)],
-        );
+        let mut args = vec![dt, input_current.to_object(py), output.to_object(py)];
+        args.extend_from_slice(&self.state.as_ref(py).extract::<Vec<PyObject>>().unwrap());
+        let args = PyTuple::new(py, args);
 
         &self
             .step_fn
             .as_ref(py)
-            .call(args, Some(self.state.as_ref(py)))
-            .expect("Call to Python function failed.");
+            .call(args, None)
+            .unwrap_or_else(|e| {
+                e.print_and_set_sys_last_vars(py);
+                panic!("Call to neuron step function failed.");
+            });
         let mut output_sig = self.output.write();
         output_sig.assign_array(&output.readonly().as_array());
     }
@@ -81,7 +84,7 @@ def step(dt, J, output):
                 String::from("output"),
                 PyArrayDyn::from_array(py, &array![0.].into_dimensionality::<IxDyn>().unwrap()),
             )),
-            state: PyDict::new(py).into(),
+            state: PyList::new(py, &[] as &[f64]).into(),
             step_fn: step_module.getattr("step").unwrap().into(),
         };
         op.input_current.reset();
@@ -112,8 +115,7 @@ def step(dt, J, output, state_var):
         )
         .unwrap();
 
-        let state = PyDict::new(py);
-        state.set_item("state_var", 4.).unwrap();
+        let state = PyList::new(py, &[4.]);
 
         let op = SimNeurons::<f64> {
             dt: 2.,

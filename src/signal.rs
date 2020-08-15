@@ -1,5 +1,6 @@
 use ndarray::prelude::*;
 use ndarray::LinalgScalar;
+use ndarray::ScalarOperand;
 use ndarray::{
     Array, ArrayBase, ArrayD, Data, Dimension, Ix, IxDyn, RawData, SliceInfo, SliceOrIndex,
 };
@@ -222,7 +223,7 @@ where
 
 impl<T> Mul<&ArrayRef<T>> for &ArrayRef<T>
 where
-    T: Element + Mul<T, Output = T> + Clone,
+    T: Element + Mul<T, Output = T> + Clone + Copy + ScalarOperand,
 {
     type Output = ArrayD<T>;
 
@@ -239,19 +240,33 @@ where
 
 impl<T, S> Mul<&ArrayBase<S, IxDyn>> for &ArrayRef<T>
 where
-    T: Element + Mul<T, Output = T> + Clone,
+    T: Element + Mul<T, Output = T> + Clone + Copy + ScalarOperand,
     S: RawData<Elem = T> + Data,
 {
     type Output = ArrayD<T>;
 
     fn mul(self, rhs: &ArrayBase<S, IxDyn>) -> Self::Output {
         match self {
-            ArrayRef::Owned(lhs) => lhs * rhs,
+            ArrayRef::Owned(lhs) => mul_view(&lhs, rhs),
             ArrayRef::View(lhs, slice) => match &*lhs.buffer.read().unwrap() {
-                ArrayRef::Owned(base) => &base.slice(slice.as_ref().as_ref()) * rhs,
+                ArrayRef::Owned(base) => mul_view(&base.slice(slice.as_ref().as_ref()), rhs),
                 ArrayRef::View(_, _) => panic!("Transitive array views are not supported."),
             },
         }
+    }
+}
+
+fn mul_view<T, S1, S2>(lhs: &ArrayBase<S1, IxDyn>, rhs: &ArrayBase<S2, IxDyn>) -> ArrayD<T>
+where
+    T: Element + Mul<T, Output = T> + Clone + Copy + ScalarOperand,
+    S1: RawData<Elem = T> + Data,
+    S2: RawData<Elem = T> + Data,
+{
+    match (lhs.shape(), rhs.shape()) {
+        ([1], [1]) => lhs * rhs,
+        ([1], _) => rhs * *lhs.first().unwrap(),
+        (_, [1]) => lhs * *rhs.first().unwrap(),
+        _ => lhs * rhs,
     }
 }
 

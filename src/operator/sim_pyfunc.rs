@@ -4,8 +4,10 @@ use numpy::Element;
 use numpy::PyArrayDyn;
 use pyo3::prelude::*;
 use pyo3::types::{PyFloat, PyTuple};
+use std::fmt::Debug;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct SimPyFunc<T>
 where
     T: Element,
@@ -18,7 +20,7 @@ where
 
 impl<T> Operator for SimPyFunc<T>
 where
-    T: Element,
+    T: Element + Debug,
 {
     fn step(&self) {
         let gil = Python::acquire_gil();
@@ -34,7 +36,10 @@ where
                         None => vec![t],
                     }
                 }
-                None => vec![],
+                None => match &self.x {
+                    Some(x) => vec![x.read().to_py_array(py).into()],
+                    None => vec![],
+                },
             },
         );
 
@@ -42,9 +47,15 @@ where
             .py_fn
             .as_ref(py)
             .call(args, None)
-            .expect("Call to Python function failed.")
+            .unwrap_or_else(|e| {
+                e.print_and_set_sys_last_vars(py);
+                panic!("Call to Python function failed");
+            })
             .extract::<Option<&PyArrayDyn<T>>>()
-            .expect("Python function failed.");
+            .unwrap_or_else(|e| {
+                e.print_and_set_sys_last_vars(py);
+                panic!("Python function did not return an array.");
+            });
         if let Some(result) = result {
             let mut output = self.output.write();
             output.assign_array(&result.readonly().as_array());

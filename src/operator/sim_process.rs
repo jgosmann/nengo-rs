@@ -4,9 +4,11 @@ use numpy::Element;
 use numpy::PyArrayDyn;
 use pyo3::prelude::*;
 use pyo3::types::{PyFloat, PyTuple};
+use std::fmt::Debug;
 use std::ops::AddAssign;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct SimProcess<T>
 where
     T: Element,
@@ -20,7 +22,7 @@ where
 
 impl<T> Operator for SimProcess<T>
 where
-    T: Element + AddAssign<T>,
+    T: Element + AddAssign<T> + Debug,
 {
     fn step(&self) {
         let gil = Python::acquire_gil();
@@ -39,9 +41,15 @@ where
             .step_fn
             .as_ref(py)
             .call(args, None)
-            .expect("Call to Python function failed.")
+            .unwrap_or_else(|e| {
+                e.print_and_set_sys_last_vars(py);
+                panic!("Call to process step function failed.");
+            })
             .extract::<Option<&PyArrayDyn<T>>>()
-            .expect("Python function failed.");
+            .unwrap_or_else(|e| {
+                e.print_and_set_sys_last_vars(py);
+                panic!("Process step function did not return an array.");
+            });
         if let Some(result) = result {
             let mut output = self.output.write();
             if self.mode_inc {

@@ -3,8 +3,10 @@ use crate::signal::{ArraySignal, SignalAccess};
 use core::ops::AddAssign;
 use ndarray::LinalgScalar;
 use numpy::Element;
+use std::fmt::Debug;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct DotInc<T>
 where
     T: Element,
@@ -16,7 +18,7 @@ where
 
 impl<T> Operator for DotInc<T>
 where
-    T: Element + AddAssign<T> + LinalgScalar,
+    T: Element + AddAssign<T> + LinalgScalar + Debug,
 {
     fn step(&self) {
         let left = self.left.read();

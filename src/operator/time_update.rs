@@ -2,6 +2,7 @@ use crate::operator::Operator;
 use crate::signal::{ScalarSignal, SignalAccess};
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct TimeUpdate<T, S> {
     pub dt: T,
     pub step_target: Arc<ScalarSignal<S>>,

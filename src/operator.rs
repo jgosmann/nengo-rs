@@ -15,8 +15,9 @@ pub use crate::operator::sim_neurons::*;
 pub use crate::operator::sim_process::*;
 pub use crate::operator::sim_pyfunc::*;
 pub use crate::operator::time_update::*;
+use std::fmt::Debug;
 
-pub trait Operator {
+pub trait Operator: Debug {
     fn step(&self);
 }
 

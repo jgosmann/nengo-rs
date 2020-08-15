@@ -5,6 +5,7 @@ use crate::sync::Event;
 use futures::executor::ThreadPool;
 use futures::future::{BoxFuture, Future, FutureExt, Shared};
 use futures::stream::{FuturesOrdered, FuturesUnordered, StreamExt};
+use pyo3::Python;
 use std::sync::{Arc, RwLock};
 
 pub struct Engine {
@@ -31,10 +32,13 @@ impl Engine {
     }
 
     pub fn run_step(&self) {
-        self.run_threaded(Self::run_step_async(
-            self.operators.clone(),
-            self.probes.clone(),
-        ));
+        let gil = Python::acquire_gil();
+        gil.python().allow_threads(|| {
+            self.run_threaded(Self::run_step_async(
+                self.operators.clone(),
+                self.probes.clone(),
+            ));
+        });
     }
 
     pub fn run_steps(&self, n_steps: i64) {
@@ -158,6 +162,7 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
     struct FakeOperator {
         call_counter: Arc<RwLock<u32>>,
         call_indices: Arc<RwLock<Vec<u32>>>,
