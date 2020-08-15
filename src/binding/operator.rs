@@ -6,6 +6,7 @@ use crate::signal::ArraySignal;
 use ndarray::ArrayD;
 use numpy::PyArrayDyn;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -118,6 +119,22 @@ bind_op!(
     {}
 );
 
+#[pyclass(extends=PyOperator, name=SimNeurons)]
+pub struct PySimNeurons {}
+
+bind_op!(
+    PySimNeurons: SimNeurons<f64>,
+    {
+        args: (dt: f64, step_fn: &PyAny, state: &PyDict),
+        signals: [input_current, output],
+    },
+    {
+        dt: dt,
+        step_fn: step_fn.into(),
+        state: state.into()
+    }
+);
+
 #[pyclass(extends=PyOperator, name=SimPyFunc)]
 pub struct PySimPyFunc {}
 
@@ -144,6 +161,7 @@ mod tests {
         m.add_class::<PyDotInc>()?;
         m.add_class::<PyElementwiseInc>()?;
         m.add_class::<PyReset>()?;
+        m.add_class::<PySimNeurons>()?;
         m.add_class::<PySimPyFunc>()?;
         m.add_class::<PyTimeUpdate>()?;
 
@@ -208,6 +226,15 @@ mod tests {
         can_instantiate(&format!(
             "o.Reset(np.zeros(1), {}, [0])",
             DUMMY_SIGNAL_CONSTRUCTOR
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn can_instantiate_sim_neurons() {
+        can_instantiate(&format!(
+            "o.SimNeurons(0.001, lambda dt, J, output: None, dict(), {}, {}, [0])",
+            DUMMY_SIGNAL_CONSTRUCTOR, DUMMY_SIGNAL_CONSTRUCTOR
         ))
         .unwrap();
     }

@@ -1,5 +1,6 @@
 from nengo.builder import Model
 from nengo.builder import operator as core_op
+from nengo.builder import neurons
 from nengo.cache import get_default_decoder_cache
 from nengo.utils.graphs import BidirectionalDAG, toposort
 from nengo.utils.simulator import operator_dependency_graph
@@ -18,6 +19,7 @@ from .engine import (
     Copy,
     DotInc,
     Probe,
+    SimNeurons,
     SimPyFunc,
 )
 
@@ -117,6 +119,17 @@ class Simulator:
                         self.get_sig(signal_to_engine_id, op.Y),
                         self.get_sig(signal_to_engine_id, op.A),
                         self.get_sig(signal_to_engine_id, op.X),
+                        dependencies,
+                    )
+                )
+            elif isinstance(op, neurons.SimNeurons):
+                ops.append(
+                    SimNeurons(
+                        self.dt,
+                        op.neurons.step,
+                        {k: self.model.sig[op][s] for k, s in op.state.items()},
+                        self.get_sig(signal_to_engine_id, op.J),
+                        self.get_sig(signal_to_engine_id, op.output),
                         dependencies,
                     )
                 )

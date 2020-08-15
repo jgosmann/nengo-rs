@@ -7,7 +7,9 @@ mod sync;
 
 use crate::binding::{
     engine::PyEngine,
-    operator::{PyCopy, PyDotInc, PyElementwiseInc, PyReset, PySimPyFunc, PyTimeUpdate},
+    operator::{
+        PyCopy, PyDotInc, PyElementwiseInc, PyReset, PySimNeurons, PySimPyFunc, PyTimeUpdate,
+    },
     probe::PyProbe,
     signal::{PySignalArrayF64, PySignalArrayViewF64, PySignalF64, PySignalU64},
 };
@@ -21,6 +23,7 @@ fn engine(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PySignalF64>()?;
     m.add_class::<PySignalU64>()?;
     m.add_class::<PyReset>()?;
+    m.add_class::<PySimNeurons>()?;
     m.add_class::<PySimPyFunc>()?;
     m.add_class::<PyTimeUpdate>()?;
     m.add_class::<PyElementwiseInc>()?;
