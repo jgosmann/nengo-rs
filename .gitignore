@@ -1,5 +1,6 @@
 /target
 Cargo.lock
+nengo_rs/nengo_rs.*.so
 
 __pycache__
 *.egg-info

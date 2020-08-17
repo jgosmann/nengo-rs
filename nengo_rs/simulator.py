@@ -9,7 +9,7 @@ from nengo.utils.simulator import operator_dependency_graph
 import numpy as np
 
 from .index_conv import slices_from_signal
-from .engine import (
+from .nengo_rs import (
     Engine,
     SignalArrayF64,
     SignalArrayViewF64,

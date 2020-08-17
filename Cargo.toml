@@ -6,9 +6,12 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[package.metadata.maturin]
+requires-dist = ["nengo~=3.0.0"]
+
 [lib]
-name = "engine"
-crate-type = ["cdylib"]
+name = "nengo_rs"
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 ndarray = "0.13.1"

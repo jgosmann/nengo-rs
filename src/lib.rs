@@ -17,7 +17,7 @@ use crate::binding::{
 use pyo3::prelude::*;
 
 #[pymodule]
-fn engine(_py: Python, m: &PyModule) -> PyResult<()> {
+fn nengo_rs(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyEngine>()?;
     m.add_class::<PySignalArrayF64>()?;
     m.add_class::<PySignalArrayViewF64>()?;
